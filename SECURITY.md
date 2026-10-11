@@ -12,7 +12,7 @@ The dashboard is a static single-page app. It has no backend, no database and no
 |---|---|
 | Proxy (SSRF) | nginx forwards only to one fixed `LYNX_URL`, set at start-up. Nothing in a request can change the target. The start-up script refuses a `LYNX_URL` with path, query, credentials, `http://` (unless explicitly allowed for the demo) or a host not in `ALLOWED_LYNX_HOSTS`, and a `BASE_PATH` with anything but plain path characters |
 | Proxy (surface) | Only `/api/v2/…`, `GET /api/v3beta/log/…` and `/mqtt` (WebSocket upgrades only) are forwarded; everything else under `/api/` returns 404 |
-| Upstream TLS | The certificate of IoT Open is verified (`proxy_ssl_verify on`) |
+| Upstream TLS | The certificate of IoT Open is verified (`proxy_ssl_verify on`, `proxy_ssl_verify_depth 3` so the full chain via the intermediate CA is accepted) |
 | Brute force | `/api/v2/auth` is rate limited to 10 requests/minute per client IP (burst 5) |
 | Forwarding headers | Client-supplied `X-Forwarded-*`/`Forwarded` are not passed on |
 | Custom server | With `CUSTOM_SERVERS=true` (default) a user may type another IoT Open server at sign-in. Only `https://` origins without credentials, path or query are accepted (`http://` only for `localhost`). The address is saved in that browser only after a successful sign-in and cannot be preset through a link or URL parameter. The container's proxy is not involved, so this does not open the proxy for SSRF |
