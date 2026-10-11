@@ -203,7 +203,7 @@ Timelines always read raw data, since averaging on/off states would hide events.
     "f:105": { "order": 1, "w": 2, "h": 2, "min": 0, "max": 100 },
     "f:120": { "order": 2, "w": 1, "h": 1 },
     "d:101": { "order": 3, "w": 4, "h": 2 },
-    "t:Events": { "order": 4, "w": 8, "h": 2, "hours": 24, "min_width": 1 },
+    "t:Events": { "order": 4, "w": 8, "h": 2, "hours": 24, "min_width": 1, "series": { "120": "#dc2626" } },
     "c:Temperatures": { "order": 5, "w": 8, "h": 3, "hours": 168, "aggr": "avg" }
   }
 }
@@ -218,6 +218,7 @@ Keys are `f:<function id>`, `d:<device id>`, `t:<timeline name>` or `c:<graph na
 | `min_width`  | timeline                     | Minimum event width in percent                                            |
 | `min`, `max` | gauge                        | Scale limits                                                              |
 | `color`      | timeline, multi-series graph | Colour for the whole widget                                               |
+| `series`     | timeline, multi-series graph | Own colour per row/line: `{ "<function id>": "<colour>" }`                |
 
 Without the file, default sizes are used and widgets are sorted by name.
 

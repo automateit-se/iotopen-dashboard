@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { normTopic } from '../../api/lynx.js';
 import { loadHistory } from '../../lib/history.js';
-import { fnName, stateText, stateKind } from '../../lib/dashboard.js';
+import { fnName, stateText, stateKind, safeColor } from '../../lib/dashboard.js';
 import { RangePicker, ZoomSurface, useTimeWindow, fmtAxis, fmtWhen } from './RangePicker.jsx';
 import { staleOf } from '../../lib/status.js';
 
@@ -66,6 +66,9 @@ export function TimelineWidget({ w, ctx, iid }) {
 
   if (!fns.length) return <div className="muted small">Alla funktioner i tidslinjen har visible = "false" i IoT Open.</div>;
 
+  // own colour per row (layout "series"), else the widget colour via --row-color
+  const rowStyle = (f) => (safeColor(w.layout.series?.[f.id]) ? { '--row-color': safeColor(w.layout.series[f.id]) } : undefined);
+
   const rows = fns.map((f) => {
     const t = normTopic(f.meta?.topic_read);
     const cur = ctx.valueOf(f);
@@ -90,6 +93,7 @@ export function TimelineWidget({ w, ctx, iid }) {
             {rows.map(({ f, cur }) => (
               <div
                 className={`tl-label ${staleOf(f, ctx.raw) ? 'stale' : ''}`}
+                style={rowStyle(f)}
                 key={f.id}
                 title={staleOf(f, ctx.raw) ? `Tyst: ${staleOf(f, ctx.raw).text}` : `${fnName(f)} (${f.type})`}
               >
@@ -102,7 +106,7 @@ export function TimelineWidget({ w, ctx, iid }) {
           <div className="tl-right">
             <ZoomSurface className="tl-bars" win={tw.win} onZoom={tw.setZoom} onHover={setHover}>
               {rows.map(({ f, segs }) => (
-                <div className="tl-bar" key={f.id}>
+                <div className="tl-bar" key={f.id} style={rowStyle(f)}>
                   {!segs.length && <span className="tl-empty small muted">ingen data</span>}
                   {segs.map((s, i) => {
                     const kind = stateKind(f, s.value);

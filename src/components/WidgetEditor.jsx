@@ -5,9 +5,7 @@ import { RANGE_OPTIONS } from './widgets/RangePicker.jsx';
 import { AGGR_METHODS } from '../lib/history.js';
 import { STATUS_META, STATUS_TEXT, parseLimits } from '../lib/status.js';
 import { FUNCTION_WIDGETS, DEVICE_WIDGETS, DEFAULT_LAYOUT, OBJ_META, WIDTH_OPTIONS, writeTopic, isHidden } from '../lib/dashboard.js';
-
-// first the graphic profile (turquoise, dark blue, warm yellow, light blue), then clear status colours
-const PALETTE = ['', '#1bb2bc', '#0d3e53', '#f6a53e', '#b4dbea', '#2563eb', '#7c3aed', '#dc2626', '#16a34a', '#475569'];
+import { ColorPicker } from './ColorPicker.jsx';
 
 /**
  * Edits one widget (or creates one from a candidate when `isNew`).
@@ -166,15 +164,8 @@ export function WidgetEditor({ kind, obj, layoutEntry, isNew, onSave, onRemove, 
           <input value={statusText} onChange={(e) => setStatusText(e.target.value)} placeholder={STATUS_TEXT[Number(status)]} />
         </Field>
       )}
-      <Field label="Färg">
-        <div className="row wrap gap">
-          {PALETTE.map((c) => (
-            <button key={c || 'none'} type="button" className={`swatch ${color === c ? 'on' : ''}`} style={{ background: c || 'var(--surface-2)' }} onClick={() => setColor(c)} aria-label={c || 'Standard'} title={c || 'Standard'}>
-              {!c && '–'}
-            </button>
-          ))}
-          <input className="color-text" value={color} onChange={(e) => setColor(e.target.value)} placeholder="#hex eller CSS-färg" />
-        </div>
+      <Field label="Färg" help="Tomt = temats widgetfärg.">
+        <ColorPicker value={color} onChange={setColor} />
       </Field>
       <Field label="Ikon">
         <div className="icon-pick">

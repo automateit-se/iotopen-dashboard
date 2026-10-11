@@ -108,6 +108,7 @@ export default function Dashboard({ iid }) {
     const key = `${g.prefix}:${name}`;
     all[key] = { ...(oldEntry || { order: widgets.length }), ...rest, ...(color ? { color } : {}) };
     if (!color) delete all[key].color;
+    if (!Object.keys(all[key].series || {}).length) delete all[key].series;
     await writeLayout(iid, { ...layout, widgets: all });
     setTimelineEditor(null);
     await reload({ quiet: true });
