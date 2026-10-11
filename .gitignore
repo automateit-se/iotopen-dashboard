@@ -1,0 +1,10 @@
+node_modules
+dist
+*.log
+# local notes that may contain credentials
+*Account*.md
+# source material for the graphic profile (the logos the app uses are copied to public/branding)
+Branding Guidlines/
+graphic profile/
+# local log of writes to real installations (installation specific)
+IOTOPEN-CHANGES.md

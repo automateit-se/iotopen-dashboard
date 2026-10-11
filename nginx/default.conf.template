@@ -1,0 +1,112 @@
+# Rendered at container start by the nginx image's envsubst entrypoint (into conf.d, i.e. the http block).
+# LYNX_URL and BASE_PATH are validated before rendering by /docker-entrypoint.d/05-validate-lynx-url.sh.
+#
+# BASE_PATH ("" by default, e.g. "/dashboard") is only needed when a reverse proxy in front forwards the
+# path prefix unchanged. A proxy that strips the prefix needs nothing: the app uses relative URLs only.
+
+# Brute-force protection for the login endpoint: 10 attempts/minute per client IP (burst 5).
+limit_req_zone $binary_remote_addr zone=dash_auth:10m rate=10r/m;
+
+# CUSTOM_SERVERS=true lets users pick another IoT Open server on the sign-in page. The browser then talks
+# to that server directly, so the CSP must allow connections to other https/wss origins.
+map "${CUSTOM_SERVERS}" $dash_connect_src {
+    default  "'self'";
+    "true"   "'self' https: wss:";
+}
+
+map $http_upgrade $dash_is_websocket {
+    default        0;
+    ~*^websocket$  1;
+}
+
+server {
+    listen       8080;
+    server_name  _;
+    root         /usr/share/nginx/html;
+    server_tokens off;
+    # relative Location headers, correct behind TLS-terminating / path-prefixing proxies
+    absolute_redirect off;
+
+    include /etc/nginx/snippets/security-headers.conf;
+
+    # "${BASE_PATH}" without trailing slash -> with (the app's URLs are relative to its directory).
+    # With an empty BASE_PATH this regex never matches.
+    location ~ ^${BASE_PATH}$ {
+        return 301 ${BASE_PATH}/$is_args$args;
+    }
+
+    # Runtime configuration for the SPA – same image, any environment.
+    location = ${BASE_PATH}/config.json {
+        include /etc/nginx/snippets/security-headers.conf;
+        default_type application/json;
+        add_header Cache-Control "no-store";
+        return 200 '{"appTitle":"${APP_TITLE}","liveUpdates":"${LIVE_UPDATES}","lynxServer":"${LYNX_URL}","customServers":"${CUSTOM_SERVERS}"}';
+    }
+
+    # Relay to IoT Open. The upstream is FIXED (${LYNX_URL}, validated at start) – nothing in a
+    # request can change it, so the proxy cannot be used for SSRF. The BASE_PATH prefix is removed.
+    location = ${BASE_PATH}/api/v2/auth {
+        limit_req        zone=dash_auth burst=5 nodelay;
+        limit_req_status 429;
+        include          /etc/nginx/snippets/lynx-proxy.conf;
+        proxy_read_timeout 30s;
+        rewrite          ^${BASE_PATH}(/.*)$ $1 break;
+        proxy_pass       ${LYNX_URL};
+    }
+
+    location ^~ ${BASE_PATH}/api/v2/ {
+        include          /etc/nginx/snippets/lynx-proxy.conf;
+        proxy_read_timeout 60s;
+        client_max_body_size 16m;
+        rewrite          ^${BASE_PATH}(/.*)$ $1 break;
+        proxy_pass       ${LYNX_URL};
+    }
+
+    location ^~ ${BASE_PATH}/api/v3beta/log/ {
+        include          /etc/nginx/snippets/lynx-proxy.conf;
+        proxy_read_timeout 60s;
+        limit_except GET { deny all; }
+        rewrite          ^${BASE_PATH}(/.*)$ $1 break;
+        proxy_pass       ${LYNX_URL};
+    }
+
+    location ${BASE_PATH}/api/ {
+        return 404;
+    }
+
+    # Live values: MQTT over WebSocket (the token is sent inside MQTT CONNECT). Exact path, upgrades only.
+    location = ${BASE_PATH}/mqtt {
+        if ($dash_is_websocket = 0) {
+            return 426;
+        }
+        include          /etc/nginx/snippets/lynx-proxy.conf;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+        rewrite          ^${BASE_PATH}(/.*)$ $1 break;
+        proxy_pass       ${LYNX_URL};
+    }
+
+    location ^~ ${BASE_PATH}/assets/ {
+        include /etc/nginx/snippets/security-headers.conf;
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        rewrite ^${BASE_PATH}(/.*)$ $1 break;
+        try_files $uri =404;
+    }
+
+    # Health check – always at /healthz, independent of BASE_PATH (used by the HEALTHCHECK in the image).
+    location = /healthz {
+        access_log off;
+        default_type text/plain;
+        return 200 'ok';
+    }
+
+    location ${BASE_PATH}/ {
+        include /etc/nginx/snippets/security-headers.conf;
+        add_header Cache-Control "no-cache";
+        rewrite ^${BASE_PATH}(/.*)$ $1 break;
+        try_files $uri $uri/ /index.html;
+    }
+}

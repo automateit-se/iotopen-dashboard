@@ -1,0 +1,143 @@
+<svg viewBox="0 0 960 640" xmlns="http://www.w3.org/2000/svg" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif">
+  <title>IoT Open Dashboard – architecture</title>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#4f6b78"/>
+    </marker>
+  </defs>
+  <rect width="960" height="640" fill="#f7fbfd"/>
+  <text x="20" y="30" font-size="18" font-weight="700" fill="#0d3e53">IoT Open Dashboard – components</text>
+
+  <!-- browser -->
+  <rect x="20" y="50" width="270" height="330" rx="12" fill="#fff" stroke="#1bb2bc" stroke-width="2"/>
+  <text x="34" y="76" font-size="15" font-weight="700" fill="#0d3e53">Browser</text>
+  <text x="34" y="94" font-size="11" fill="#4f6b78">React single-page app (react, react-dom)</text>
+  <g font-size="12" fill="#0d2e3d">
+    <rect x="34" y="106" width="242" height="58" rx="7" fill="#edf6fa"/>
+    <text x="44" y="124" font-weight="600">Pages</text>
+    <text x="44" y="140">Sign-in (password + 2FA / API key)</text>
+    <text x="44" y="155">Installations · Dashboard</text>
+    <rect x="34" y="170" width="242" height="72" rx="7" fill="#edf6fa"/>
+    <text x="44" y="188" font-weight="600">Widgets and editors</text>
+    <text x="44" y="204">value, status, switch, set point,</text>
+    <text x="44" y="219">gauge, chart, card, timeline,</text>
+    <text x="44" y="234">multi-series graph, settings</text>
+    <rect x="34" y="248" width="242" height="74" rx="7" fill="#edf6fa"/>
+    <text x="44" y="266" font-weight="600">Logic</text>
+    <text x="44" y="282">metadata schema · status / limits</text>
+    <text x="44" y="297">history + aggregation · zoom</text>
+    <text x="44" y="312">colour theme per installation</text>
+    <rect x="34" y="328" width="118" height="40" rx="7" fill="#0d3e53"/>
+    <text x="44" y="346" fill="#fff" font-weight="600">lynx.js</text>
+    <text x="44" y="360" fill="#b4dbea" font-size="11">REST client</text>
+    <rect x="158" y="328" width="118" height="40" rx="7" fill="#0d3e53"/>
+    <text x="168" y="346" fill="#fff" font-weight="600">mqtt.js</text>
+    <text x="168" y="360" fill="#b4dbea" font-size="11">MQTT 3.1.1 over WS</text>
+  </g>
+  <text x="34" y="398" font-size="11" fill="#4f6b78">Token in session/local storage</text>
+
+  <!-- reverse proxy -->
+  <rect x="330" y="50" width="170" height="110" rx="12" fill="#fff" stroke="#9fb7c2" stroke-dasharray="5 4"/>
+  <text x="344" y="76" font-size="14" font-weight="700" fill="#0d3e53">Reverse proxy</text>
+  <text x="344" y="96" font-size="12" fill="#0d2e3d">HTTPS / WSS (TLS)</text>
+  <text x="344" y="114" font-size="12" fill="#0d2e3d">optional access gate</text>
+  <text x="344" y="132" font-size="12" fill="#0d2e3d">optional /dashboard/ prefix</text>
+  <text x="344" y="150" font-size="11" fill="#4f6b78">(deployment)</text>
+
+  <!-- container -->
+  <rect x="330" y="190" width="250" height="230" rx="12" fill="#fff" stroke="#0d3e53" stroke-width="2"/>
+  <text x="344" y="216" font-size="15" font-weight="700" fill="#0d3e53">Docker container</text>
+  <text x="344" y="234" font-size="11" fill="#4f6b78">nginx-unprivileged · :8080 · non-root</text>
+  <g font-size="12" fill="#0d2e3d">
+    <text x="344" y="258">• static files (Vite build)</text>
+    <text x="344" y="276">• /config.json from environment</text>
+    <text x="344" y="294">• proxy /api/v2/… → LYNX_URL</text>
+    <text x="344" y="312">• proxy GET /api/v3beta/log/…</text>
+    <text x="344" y="330">• proxy /mqtt (WebSocket only)</text>
+    <text x="344" y="348">• rate limit on /api/v2/auth</text>
+    <text x="344" y="366">• CSP + security headers</text>
+    <text x="344" y="384">• start-up check LYNX_URL / BASE_PATH</text>
+    <text x="344" y="402">• /healthz</text>
+  </g>
+
+  <!-- IoT Open -->
+  <rect x="630" y="50" width="310" height="370" rx="12" fill="#fff" stroke="#f6a53e" stroke-width="2"/>
+  <text x="644" y="76" font-size="15" font-weight="700" fill="#0d3e53">IoT Open (Lynx)</text>
+  <text x="644" y="94" font-size="11" fill="#4f6b78">master for data, users and permissions</text>
+  <g font-size="12" fill="#0d2e3d">
+    <rect x="644" y="104" width="282" height="58" rx="7" fill="#fdf3e4"/>
+    <text x="654" y="122" font-weight="600">REST /api/v2</text>
+    <text x="654" y="138">auth (2FA) · installation · devicex ·</text>
+    <text x="654" y="153">functionx · status · meta · File API</text>
+    <rect x="644" y="168" width="282" height="42" rx="7" fill="#fdf3e4"/>
+    <text x="654" y="186" font-weight="600">Log /api/v3beta/log</text>
+    <text x="654" y="202">history, aggr_method / aggr_interval</text>
+    <rect x="644" y="216" width="282" height="72" rx="7" fill="#fdf3e4"/>
+    <text x="654" y="234" font-weight="600">MQTT broker (wss://…/mqtt)</text>
+    <text x="654" y="250">&lt;cid&gt;/obj/… values · &lt;cid&gt;/set/obj/… control</text>
+    <text x="654" y="265">&lt;cid&gt;/evt/{functionx,devicex,</text>
+    <text x="654" y="280">installation,file}/updated</text>
+    <rect x="644" y="294" width="282" height="72" rx="7" fill="#e9f6ef"/>
+    <text x="654" y="312" font-weight="600">Dashboard configuration</text>
+    <text x="654" y="328">installation: dashboard.title/admins/color_*</text>
+    <text x="654" y="343">function/device: dashboard.widget, …limits</text>
+    <text x="654" y="358">file: dashboard-layout.json</text>
+    <rect x="644" y="372" width="282" height="38" rx="7" fill="#eef1f4"/>
+    <text x="654" y="390" font-weight="600">metric-monitor (server job)</text>
+    <text x="654" y="404" font-size="11">metric_monitor.status → shown as "silent"</text>
+  </g>
+
+  <!-- data sources -->
+  <rect x="630" y="460" width="310" height="150" rx="12" fill="#fff" stroke="#9fb7c2" stroke-width="2"/>
+  <text x="644" y="486" font-size="15" font-weight="700" fill="#0d3e53">Data sources</text>
+  <g font-size="12" fill="#0d2e3d">
+    <text x="644" y="506">Generic subsystem, edge device, AI sensor</text>
+    <text x="644" y="522">or similar, e.g. a Raspberry Pi with</text>
+    <text x="644" y="538">IoT Open Edge Client, a gateway or</text>
+    <text x="644" y="554">an integration (e.g. Home Assistant)</text>
+    <text x="644" y="572">• publish values to obj/…</text>
+    <text x="644" y="590">• act on set/obj/… commands</text>
+    <text x="644" y="604" font-size="11" fill="#4f6b78">own IoT Open account per integration</text>
+  </g>
+
+  <!-- build -->
+  <rect x="330" y="460" width="250" height="150" rx="12" fill="#fff" stroke="#9fb7c2" stroke-width="2"/>
+  <text x="344" y="486" font-size="15" font-weight="700" fill="#0d3e53">Build and delivery</text>
+  <g font-size="12" fill="#0d2e3d">
+    <text x="344" y="506">Private GitHub repository</text>
+    <text x="344" y="524">GitHub Actions: container.yml</text>
+    <text x="344" y="542">→ ghcr.io image, amd64 + arm64</text>
+    <text x="344" y="560">Docker Compose: dashboard,</text>
+    <text x="344" y="578">demo profile with IoT Open mock</text>
+  </g>
+
+  <!-- development -->
+  <rect x="20" y="460" width="270" height="150" rx="12" fill="#fff" stroke="#9fb7c2" stroke-width="2"/>
+  <text x="34" y="486" font-size="15" font-weight="700" fill="#0d3e53">Local development</text>
+  <g font-size="12" fill="#0d2e3d">
+    <text x="34" y="506">Vite dev server :5173</text>
+    <text x="34" y="524">proxies /api and /mqtt like nginx</text>
+    <text x="34" y="542">mock/server.mjs :8787</text>
+    <text x="34" y="560">(REST, MQTT, evt events,</text>
+    <text x="34" y="578">aggregation, 2FA, API key)</text>
+  </g>
+
+  <!-- arrows -->
+  <g stroke="#4f6b78" stroke-width="1.6" fill="none" marker-end="url(#a)">
+    <path d="M290 160 L330 120"/>
+    <path d="M415 160 L415 190"/>
+    <path d="M580 260 L644 135"/>
+    <path d="M580 300 L644 190"/>
+    <path d="M580 330 L644 250"/>
+    <path d="M785 460 L785 410"/>
+    <path d="M455 460 L455 420"/>
+  </g>
+  <g font-size="11" fill="#4f6b78" stroke="#f7fbfd" stroke-width="4" paint-order="stroke">
+    <text x="294" y="168">HTTPS</text>
+    <text x="598" y="200">REST</text>
+    <text x="604" y="248">log</text>
+    <text x="604" y="294">WSS</text>
+    <text x="792" y="440">MQTT (+ REST)</text>
+    <text x="462" y="444">image</text>
+  </g>
+</svg>

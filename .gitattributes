@@ -1,0 +1,5 @@
+# files that run inside the Linux container must keep LF line endings
+*.sh       text eol=lf
+*.template text eol=lf
+*.conf     text eol=lf
+Dockerfile text eol=lf

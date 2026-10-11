@@ -1,0 +1,10 @@
+node_modules
+dist
+.git
+*.log
+# local notes that may contain credentials – never part of the image
+*Account*.md
+IOTOPEN-CHANGES.md
+.*/
+.github
+Branding Guidlines

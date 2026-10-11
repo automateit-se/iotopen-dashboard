@@ -1,0 +1,277 @@
+# IoT Open Dashboard
+
+A generic, configurable dashboard on top of [IoT Open](https://iotopen.se) (Lynx). It shows one dashboard per installation, and **everything it shows is configured in IoT Open itself**: simple settings as metadata on installations, devices and functions, and the layout as a JSON file in the installation's File API.
+
+The app has **no backend and no database of its own**:
+
+- **Sign-in, users and permissions** are IoT Open's. Two ways to sign in:
+  - *Username (E-mail) and password* via `POST /api/v2/auth`, with two-factor authentication. IoT Open answers with `next_step` and a temporary token, and the code is sent with `PUT /api/v2/auth`. Such a session can expire.
+  - *API key* created under the user in IoT Open. It is used directly as `X-API-Key` (and as the MQTT password), checked with `GET /api/v2/user/me`, and does not expire. This suits a wall screen. Signing out does not call `DELETE /auth` for an API key, so the key stays valid in IoT Open.
+  - With *Remember me* (*Kom ihåg mig*) the token is kept in the browser's `localStorage`, otherwise in `sessionStorage` for the tab only.
+- **Server**: the sign-in page shows which IoT Open server is used (*Server: lynx.iotopen.se*). The default is the container's `LYNX_URL`. With *Change* (*Ändra*) the user can type another server, e.g. `lynx.example.com`. After a successful sign-in that address is saved in this browser (`localStorage`) and used until the user changes it or chooses *Default* (*Standard*). Only `https://` addresses without a path are accepted (plain `http://` only for `localhost`). The default server is reached through the container's proxy; another server is called directly from the browser, which works because IoT Open allows CORS. `CUSTOM_SERVERS=false` turns the choice off.
+- **Live values** arrive over MQTT on a WebSocket (`/mqtt`) with the same token. Without MQTT everything is re-read over REST every 30 s. The header shows *Live* (green) or *Polling*.
+- **Changes in IoT Open** (devices, functions, installation metadata, files) arrive as `<client_id>/evt/<type>/updated` events, so nothing is polled while MQTT is connected.
+- **Control**: switches, set points and dimmers publish to `<client_id>/<topic_write>` (topics starting with `set/obj/…`).
+- **Container**: nginx (non-root, port 8080). It serves the app and proxies `/api/*` and `/mqtt` to one fixed IoT Open address (`LYNX_URL`), so with the default server the browser only talks to its own origin.
+
+See [SECURITY.md](SECURITY.md) for the security model and deployment checklist.
+
+> The user interface is in Swedish. UI labels in this document are given in English with the Swedish label in parentheses.
+
+## Architecture
+
+![Architecture: browser, container, IoT Open and data sources](docs/architecture.png)
+
+- **Browser**: the React app talks REST (`lynx.js`) and MQTT over WebSocket (`mqtt.js`) to its own origin, or directly to another IoT Open server chosen on the sign-in page.
+- **Reverse proxy** (optional, part of the deployment): TLS, an access gate and an optional sub-path.
+- **Container**: nginx serves the built app and proxies `/api/v2`, `/api/v3beta/log` and `/mqtt` to one fixed IoT Open address.
+- **IoT Open (Lynx)** is the master for data, users, permissions and the dashboard configuration (metadata and `dashboard-layout.json`).
+- **Data sources** are whatever feeds the installation: a generic subsystem, an edge device, an AI sensor or similar, for example a Raspberry Pi with the [IoT Open Edge Client](https://lynx.iotopen.se/tech/guides/gateways/raspberrypi/), a gateway or an integration such as Home Assistant. They publish values to `obj/…` and act on `set/obj/…`. The dashboard never talks to them directly.
+
+## Getting started
+
+```bash
+# Production
+docker build -t iotopen-dashboard .
+docker run -p 8080:8080 -e LYNX_URL=https://lynx.iotopen.se iotopen-dashboard
+
+# Fully local demo against a mock of IoT Open
+docker compose --profile demo up --build     # http://localhost:8081  demo@example.com / demo
+
+# Development
+npm install
+npm run dev:mock          # mock API + MQTT on :8787
+npm run dev               # Vite on :5173, proxies /api and /mqtt to the mock
+LYNX_URL=https://lynx.iotopen.se npm run dev   # against a real instance (PowerShell: $env:LYNX_URL="https://lynx.iotopen.se"; npm run dev)
+```
+
+The mock (`mock/server.mjs`, no dependencies) implements the parts of the IoT Open API the dashboard uses, including MQTT, `evt/*` events, aggregation and the rejection of empty metadata values. Test logins: `demo@example.com` / `demo`, API key `demo-api-key`, and `twofa@example.com` / `demo` with code `123456`.
+
+> If the project folder is in a synced folder (Nextcloud, OneDrive …), run `npm install` in a copy outside it so `node_modules` is not synced.
+
+### Building the container on GitHub
+
+`.github/workflows/container.yml` builds the image for amd64 and arm64 and publishes it to GitHub Container Registry:
+
+- a push to `main` gives `ghcr.io/<owner>/<repo>:main` and `:sha-<short>`
+- the tag `v1.2.3` gives `:1.2.3`, `:1.2` and `:latest`
+- pull requests are built but not published
+
+```bash
+docker run -d -p 8080:8080 -e LYNX_URL=https://lynx.iotopen.se ghcr.io/<owner>/<repo>:latest
+```
+
+If the repository is private the package is private too. Then `docker login ghcr.io` with a token that has `read:packages` is needed, or the package can be made public under *Package settings* on GitHub.
+
+### Environment variables (container)
+
+| Variable                  | Default                   | Meaning                                                                                                                                                         |
+|---------------------------|---------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `LYNX_URL`                | `https://lynx.iotopen.se` | IoT Open instance that `/api` and `/mqtt` are forwarded to                                                                                                      |
+| `ALLOWED_LYNX_HOSTS`      | `lynx.iotopen.se`         | Allowed host names for `LYNX_URL`. The container refuses to start otherwise                                                                                     |
+| `ALLOW_INSECURE_LYNX_URL` | `false`                   | `true` allows `http://` (only for the local demo)                                                                                                               |
+| `APP_TITLE`               | `Dashboard`               | Name next to the IoT Open logo in the header and on the sign-in page                                                                                            |
+| `LIVE_UPDATES`            | `true`                    | `false` turns MQTT off; only polling is used                                                                                                                    |
+| `BASE_PATH`               | *(empty)*                 | Path prefix the container itself serves under, e.g. `/dashboard` (no trailing slash). Only needed when a reverse proxy forwards the prefix unchanged, see below |
+| `CUSTOM_SERVERS`          | `true`                    | `true` lets users type another IoT Open server on the sign-in page (saved in their browser; the CSP then allows `https:`/`wss:` connections). `false` = only `LYNX_URL` |
+
+### Running under a sub-path
+
+The app only uses URLs relative to the directory it is served from (API, MQTT, `config.json`, assets, images), so the same image works at `https://host/` and at `https://host/dashboard/`. The health check is always `/healthz`.
+
+- **Reverse proxy strips the prefix** (most common) – nothing to configure:
+
+  ```nginx
+  location /dashboard/ {
+      proxy_pass http://dashboard:8080/;          # trailing slash: /dashboard/x -> /x
+      proxy_http_version 1.1;
+      proxy_set_header Upgrade $http_upgrade;     # MQTT over WebSocket
+      proxy_set_header Connection "upgrade";
+      proxy_read_timeout 3600s;
+  }
+  ```
+- **Reverse proxy keeps the prefix** – set `BASE_PATH=/dashboard`. The container then serves everything under `/dashboard/` and removes the prefix before forwarding to IoT Open.
+
+The page needs the trailing slash (`/dashboard/`). With `BASE_PATH` the container redirects `/dashboard` to `/dashboard/`; behind a prefix-stripping proxy, let the proxy do that redirect (e.g. `location = /dashboard { return 301 /dashboard/; }`).
+
+## Configuration in IoT Open
+
+### On the installation (metadata)
+
+| Key                                   | Meaning                                                                                                                                                                           |
+|---------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `dashboard.title`                     | Dashboard heading. Empty = the installation's name                                                                                                                                |
+| `dashboard.admins`                    | Who may edit: user ids or e-mail addresses, comma separated. Empty = everyone. This only controls the editing UI; IoT Open still rejects writes the account has no right to (403) |
+| `dashboard.color_primary`             | Primary colour: header, headings, selected buttons. Default `#0D3E53`                                                                                                             |
+| `dashboard.color_widget`              | Default widget colour and "on" state in timelines. Default = primary colour (light blue `#B4DBEA` in dark mode)                                                                   |
+| `dashboard.color_accent`              | Primary buttons (*Klar*, *Spara*, *Logga in*). Default `#F6A53E`                                                                                                                  |
+| `dashboard.color_header`              | Header background. Default = primary colour                                                                                                                                       |
+| `dashboard.color_title`               | Colour of the installation title at the top of the dashboard. Default = primary colour, light mode                                                                                |
+| `dashboard.color_background`          | Page background (light mode). Default `#EDF6FA`                                                                                                                                   |
+| `dashboard.color_warning`             | Tile colour at status 1 (Warning). Default `#F6A53E`                                                                                                                              |
+| `dashboard.color_critical`            | Tile colour at status 2 (Critical). Default `#D32F2F`                                                                                                                             |
+| `dashboard.color_info_background`     | Info box background (e.g. the edit-mode hint). Default `#EDF6FA`, light mode                                                                                                      |
+| `dashboard.color_info_text`           | Info box text. Default = primary colour, light mode                                                                                                                               |
+| `dashboard.color_range_background`    | Frame around the time range buttons (1 h, 24 h …). Default `#E2EFF5`, light mode                                                                                                  |
+| `dashboard.color_range_text`          | Text of buttons that are not selected. Default `#4F6B78`, light mode                                                                                                              |
+| `dashboard.color_range_selected`      | Background of the selected range. Default white, light mode                                                                                                                       |
+| `dashboard.color_range_selected_text` | Text of the selected range. Default `#0D2E3D`, light mode                                                                                                                         |
+
+All colours can be edited in the dashboard under *Edit → Settings* (*Redigera → Inställningar*, with a colour picker), or directly in Lynx. Values must be valid CSS colours; anything else is ignored. An empty field removes the key and restores the default.
+
+### On a function or device (metadata)
+
+A function or device appears on the dashboard when it has `dashboard.widget`. Everything can be set in the dashboard's edit mode or directly in Lynx.
+
+| Key                  | Values                                                                                                                                                                                                                                          |
+|----------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `dashboard.widget`   | Function: `value`, `chart`, `gauge`, `switch`, `status`, `number`. Device: `card`. Empty = not shown                                                                                                                                            |
+| `dashboard.nickname` | Display name. Empty = `meta.name`                                                                                                                                                                                                               |
+| `dashboard.color`    | Any CSS colour, e.g. `#0f766e`                                                                                                                                                                                                                  |
+| `dashboard.icon`     | Icon name: `bolt`, `thermometer`, `droplet`, `power`, `lightbulb`, `gauge`, `door`, `lift`, `wind`, `home`, `chart`, `alert`, `sun`, `fan`, `lock`, `signal`, `battery`, `device`. Empty = IoT Open's standard `icon` key if it is one of these |
+| `dashboard.timeline` | Name of a timeline. All functions with the same name become rows in one timeline widget                                                                                                                                                         |
+| `dashboard.chart`    | Name of a multi-series graph. All functions with the same name are drawn as lines in one graph                                                                                                                                                  |
+| `dashboard.limits`   | Limits for status OK / Warning / Critical, e.g. `-w<18,>21 -c<16,>22` (see below)                                                                                                                                                               |
+
+The dashboard also reads IoT Open's standard function metadata ([meta keys](https://lynx.iotopen.se/tech/docs/platform/devxfuncx/meta-keys.html)): `name`, `format`, `unit`, `icon`, `visible`, `topic_read`, `topic_write`, `topic_read_onoff`, `topic_write_onoff`, `min`, `max`, and the `state_<x>` / `text_<x>` pairs (`on`/`off`, `open`/`closed`, `true`/`false`, `movement`/`nomovement` …).
+
+**IoT Open is the master.** An object with `visible = "0"` or `"false"` is hidden everywhere in the dashboard: widgets, card rows, timelines, graphs and the *Add widget* lists. In edit mode hidden widgets stay visible, dimmed and marked *Hidden* (*Dold*). A missing `visible` means visible.
+
+### Widget types
+
+- **value**: the latest value, formatted with the function's `format` and `unit`. Discrete values use the `state_<x>`/`text_<x>` pairs, e.g. `state_closed = 0`, `text_closed = Closed`.
+- **status**: like *value*, plus a dot showing the state (coloured when active – on, open, movement – grey otherwise). Best for doors, alarms and motion.
+- **switch**: a toggle that publishes the "on"/"off" state value (`state_on`/`state_off`, or the matching pair, default 1/0) to `topic_write`, or `topic_write_onoff` when present.
+- **number**: publishes a number to `topic_write`. With `min`/`max` it becomes a slider (e.g. a dimmer 0–100); with `topic_write_onoff` an on/off toggle is added.
+- **gauge**: a half circle between `min` and `max` (from the layout file).
+- **chart**: a graph of the history from the log, extended with live values.
+- **card** (on a device): all functions whose `meta.device_id` is the device's id. Switches and set points can be controlled in the card.
+- **Timeline**: discrete functions (switch, door, movement, boolean_text, binary, leak …) as state bars over time, one row per function. Created with *Add widget → New timeline* (*Lägg till widget → Ny tidslinje*). Membership is `dashboard.timeline` on each function; size, hours, colour and minimum event width are stored in the layout file under `t:<name>`.
+- **Multi-series graph**: several analog functions (e.g. all temperatures) as lines with a shared y-axis, with a legend showing the latest value or the value under the pointer. Created with *Add widget → New graph with several values* (*Ny graf med flera värden*). Membership is `dashboard.chart` on each function; size and hours under `c:<name>`. A function's `dashboard.color` is its line colour, otherwise the profile colours are used in turn. The editor warns when the selected values have different units.
+
+### Status: OK, Warning and Critical
+
+A function can have status 0 = OK, 1 = Warning or 2 = Critical – the same levels as IoT Open's metric-monitor. At 0 the tile keeps its normal colours; at 1 the whole tile is filled with the warning colour and at 2 with the critical colour, with a *Warning*/*Critical* label. Cards, timelines and graphs show the worst status of their functions, and the value causing it is highlighted.
+
+| Source (in priority order)                     | Meaning                                                                                            |
+|------------------------------------------------|----------------------------------------------------------------------------------------------------|
+| `dashboard.status` (+ `dashboard.status_text`) | Set by something else, e.g. a server-side service or a person in Lynx. The dashboard only reads it |
+| `dashboard.limits`                             | Limits evaluated live against the latest value                                                     |
+
+Limit syntax: `-w` = warning, `-c` = critical, each followed by comma separated conditions; one matching condition is enough. Operators: `<`, `<=`, `>`, `>=`, `=`, `!=`. Critical wins over warning.
+
+**Silent functions.** IoT Open's metric-monitor is a server job: for functions and devices with `metric_monitor.max_silent_time` it sets `metric_monitor.status` (1 or 2 when silent too long) and `metric_monitor.status_text`. The last value may then be out of date, so the dashboard shows such functions greyed out with the name struck through and a *Silent* (*Tyst*) label (the explanation appears on hover). Limits are not evaluated on a stale value, so a silent function never turns orange or red. A silent device makes all its functions silent. The dashboard never writes `metric_monitor.*`.
+
+### Automatic updates
+
+IoT Open publishes `<client_id>/evt/<type>/updated` (payload `{}`) whenever something in the installation changes, metadata included. The dashboard subscribes to four of them and re-reads only what changed, within about a second:
+
+| Event                                          | Re-reads                                                                                         |
+|------------------------------------------------|--------------------------------------------------------------------------------------------------|
+| `evt/functionx/updated`, `evt/devicex/updated` | Devices and functions (`visible`, `dashboard.widget`, `dashboard.timeline`, `dashboard.chart` …) |
+| `evt/installation/updated`                     | Installation metadata (title, colours, admins)                                                   |
+| `evt/file/updated`                             | The layout file `dashboard-layout.json`                                                          |
+
+After a reconnect everything is read once.
+
+### Time ranges and zoom
+
+Graphs and timelines have the buttons **1 h, 24 h, 7 d, 30 d and 1 year**. The default range is set per widget (`hours` in the layout file). Viewers can change the range and **zoom** by dragging across part of a graph or timeline; *Reset* (*Återställ*) goes back. Nothing of this is saved.
+
+History comes from `/api/v3beta/log`. For graphs the dashboard lets IoT Open aggregate with `aggr_method` and `aggr_interval`, so a series has at most a few hundred points:
+
+| Window                          | Interval |
+|---------------------------------|----------|
+| up to 6 h (also when zoomed in) | raw data |
+| 24 h                            | 5 min    |
+| 7 d                             | 30 min   |
+| 30 d                            | 3 h      |
+| 1 year                          | 1 day    |
+
+The method is chosen per graph (`aggr` in the layout file): average (default), median, minimum, maximum, last value or sum – *last value* or *maximum* suits meter readings. The graph states e.g. *Visar medelvärde per 3 h* (average per 3 h). Without aggregation (older IoT Open) raw data is read, at most 30,000 values.
+
+Timelines always read raw data, since averaging on/off states would hide events. The cap is the newest 60,000 events; when reached, the timeline says where they start. Short events are drawn with a **minimum width** (`min_width`, percent of the width, default 1; 0 = exact length).
+
+### The layout file `dashboard-layout.json` (installation File API)
+
+```json
+{
+  "version": 2,
+  "updated": "2026-10-07T07:10:00.000Z",
+  "widgets": {
+    "f:113": { "order": 0, "w": 4, "h": 2, "hours": 24, "aggr": "avg" },
+    "f:105": { "order": 1, "w": 2, "h": 2, "min": 0, "max": 100 },
+    "f:120": { "order": 2, "w": 1, "h": 1 },
+    "d:101": { "order": 3, "w": 4, "h": 2 },
+    "t:Events": { "order": 4, "w": 8, "h": 2, "hours": 24, "min_width": 1 },
+    "c:Temperatures": { "order": 5, "w": 8, "h": 3, "hours": 168, "aggr": "avg" }
+  }
+}
+```
+
+Keys are `f:<function id>`, `d:<device id>`, `t:<timeline name>` or `c:<graph name>`. `w` is the width in columns of 8 (1–8) and `h` the height in rows. The grid has 8 columns on wide screens, 6 and 4 on smaller ones and 2 on phones, so `w = 1` puts two small widgets side by side on a phone. Files with `"version": 1` (4 columns) are converted automatically (widths doubled) and saved as version 2 the next time the layout changes.
+
+| Parameter    | Applies to                   | Meaning                                                                   |
+|--------------|------------------------------|---------------------------------------------------------------------------|
+| `hours`      | graph, timeline              | Default range in hours (1, 24, 168, 720, 8760)                            |
+| `aggr`       | graph                        | Aggregation for long ranges: `avg`, `median`, `min`, `max`, `last`, `sum` |
+| `min_width`  | timeline                     | Minimum event width in percent                                            |
+| `min`, `max` | gauge                        | Scale limits                                                              |
+| `color`      | timeline, multi-series graph | Colour for the whole widget                                               |
+
+Without the file, default sizes are used and widgets are sorted by name.
+
+## What the dashboard writes to IoT Open – and how to undo it
+
+The dashboard only writes when an admin changes something in edit mode:
+
+| Action                        | Write                                                                                        | Undo                                                                            |
+|-------------------------------|----------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------|
+| Add or edit a widget          | `PUT …/functionx/{iid}/{id}/meta/dashboard.*` (or `devicex`) + `dashboard-layout.json`       | Remove the key in Lynx, or *Remove from dashboard* (*Ta bort från dashboarden*) |
+| Remove a widget               | `dashboard.widget` is deleted. Name, colour and icon stay                                    | Set `dashboard.widget` again                                                    |
+| Timeline / multi-series graph | `dashboard.timeline` / `dashboard.chart` on each selected function + `dashboard-layout.json` | *Remove timeline/graph*, or remove the keys in Lynx                             |
+| Visible checkbox              | `visible` = `"true"`/`"false"` on the function (never deleted)                               | Set the value back in Lynx or in the widget editor                              |
+| Limits                        | `dashboard.limits` on the function                                                           | Empty the field, or remove the key in Lynx                                      |
+| Status                        | `dashboard.status` (0/1/2) + `dashboard.status_text` on the function                         | Choose *Ingen* in the widget editor, or remove the keys in Lynx                 |
+| Logo                          | File `dashboard-logo.png` on the installation                                                | *Återställ till IoT Open* in Settings, or delete the file under *Files*         |
+| Move or resize a widget       | Only `dashboard-layout.json`                                                                 | Delete the file under the installation's *Files* for the default layout         |
+| Settings                      | `PUT …/installation/{iid}/meta/dashboard.*` (title, admins, colours)                         | Remove the keys in Lynx, or empty the fields                                    |
+
+IoT Open rejects empty metadata values, so an empty field in the dashboard always means the key is deleted with `DELETE …/meta/{key}`.
+
+The keys the dashboard writes are:
+
+- on the installation: `dashboard.title`, `dashboard.admins` and `dashboard.color_*` (see the table above)
+- on functions and devices: `dashboard.widget`, `dashboard.nickname`, `dashboard.color`, `dashboard.icon`, `dashboard.timeline`, `dashboard.chart`, `dashboard.limits`, `dashboard.status`, `dashboard.status_text`, and `visible`
+
+Other `dashboard.*` keys may come from older dashboards (e.g. `dashboard.in_graph`, `dashboard.menu_group`). They are not read and must not be removed when undoing changes made here.
+
+`dashboard.status` is a fixed status that takes priority over `dashboard.limits`. The widget editor only creates it when a status is chosen there; after that it can be changed from IoT Open (or by another system) and the tile follows live.
+
+## Appearance
+
+The default colours follow the TH1NG graphic profile 2024 (`Branding Guidlines/`, not part of the repository): primary `#0D3E53`, accent `#F6A53E`, light blues `#B4DBEA` and `#EDF6FA`. Each installation can override them with the `dashboard.color_*` keys. The defaults are CSS variables at the top of `src/styles.css`, with a separate dark mode. The logo and favicon are IoT Open's (`public/branding/`, `public/favicon.svg`). The profile's typeface is not used; the system font is.
+
+Each installation can replace the header logo with its own PNG (Settings → Logotyp), stored as `dashboard-logo.png` through the File API. Any pixel size works: the logo is scaled to the header height with its aspect ratio kept. A wide logo with a transparent background, about 120 px high, gives the sharpest result. Text in the header and on primary buttons switches between dark and white automatically depending on the chosen colours.
+
+## Project structure
+
+```
+src/api/lynx.js                 IoT Open REST client (fetch, no dependencies)
+src/api/mqtt.js                 MQTT 3.1.1 over WebSocket: subscribe, publish, reconnect
+src/api/config.js               runtime configuration (/config.json from nginx)
+src/api/server.js               which IoT Open server is used: default (proxy) or one chosen at sign-in
+src/lib/dashboard.js            metadata schema, widgets, layout file, colours
+src/lib/format.js               value formatting (format, unit, state_<x>/text_<x>)
+src/lib/status.js               OK / Warning / Critical and silent functions
+src/lib/history.js              log reading with server-side aggregation
+src/context/AppContext.jsx      session and installations
+src/context/useInstallation.js  REST snapshot + MQTT live values + evt events for one installation
+src/components/widgets/         widget types, timeline, multi-series graph, range/zoom
+src/components/                 editors (WidgetEditor, TimelineEditor, AddWidget, InstallationSettings)
+src/pages/                      Login, Installations, Dashboard
+nginx/                          proxy, security headers, start-up check of LYNX_URL
+mock/server.mjs                 dependency-free mock of IoT Open (REST + MQTT) for local development
+```
+
+Runtime dependencies: only `react` and `react-dom`.
