@@ -368,6 +368,10 @@ input[aria-invalid='true'] { border-color: var(--danger); }
 .check-list li { padding: 7px 10px; border-bottom: 1px solid var(--border); }
 .check-list li:last-child { border-bottom: 0; }
 .check-list .check { align-items: flex-start; }
+.series-color { display: inline-flex; align-items: center; gap: 2px; flex: none; }
+.series-color input[type="color"] { width: 26px; height: 22px; padding: 0; border: 1px dashed var(--border); border-radius: 6px; background: none; cursor: pointer; }
+.series-color input[type="color"].set { border: 2px solid var(--text); }
+.series-color .icon-btn { padding: 0 4px; }
 .pick-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 4px; }
 .pick-list button {
   width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 10px; text-align: left;

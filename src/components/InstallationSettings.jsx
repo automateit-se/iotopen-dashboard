@@ -1,19 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Modal, Field, errText } from './Modal.jsx';
+import { toHex } from './ColorPicker.jsx';
 import { INST_META, LAYOUT_FILE, LOGO_FILE, LOGO_MAX_BYTES, THEME_GROUPS, THEME_META, checkLogo, writeInstallationMeta, writeLogo } from '../lib/dashboard.js';
 
 const validColor = (v) => !v || CSS.supports('color', v);
-
-/** Any CSS colour -> "#rrggbb" for <input type="color"> (which only accepts that form). */
-function toHex(color) {
-  const ctx = document.createElement('canvas').getContext('2d');
-  ctx.fillStyle = '#000000';
-  ctx.fillStyle = color; // invalid colours leave the previous value
-  const v = ctx.fillStyle; // "#rrggbb" or "rgba(…)"
-  if (v.startsWith('#')) return v;
-  const m = v.match(/\d+(\.\d+)?/g) || [0, 0, 0];
-  return '#' + m.slice(0, 3).map((n) => Math.round(Number(n)).toString(16).padStart(2, '0')).join('');
-}
 
 /** Dashboard-wide settings, stored as metadata on the installation. Empty = key removed = default. */
 export function InstallationSettings({ inst, user, logo, onSaved, onClose }) {

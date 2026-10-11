@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Modal, Field, errText } from './Modal.jsx';
-import { DEFAULT_LAYOUT, GROUPS, WIDTH_OPTIONS, fnName, isDiscrete, isHidden, unitOf } from '../lib/dashboard.js';
+import { DEFAULT_LAYOUT, GROUPS, OBJ_META, SERIES_COLORS, WIDTH_OPTIONS, fnName, isDiscrete, isHidden, safeColor, unitOf } from '../lib/dashboard.js';
+import { ColorPicker, SeriesColor } from './ColorPicker.jsx';
 import { RANGE_OPTIONS } from './widgets/RangePicker.jsx';
 import { AGGR_METHODS } from '../lib/history.js';
 
@@ -40,6 +41,8 @@ export function TimelineEditor({ group = 'timeline', raw, name: oldName, layoutE
   const [w, setW] = useState(base.w);
   const [h, setH] = useState(base.h);
   const [color, setColor] = useState(base.color || '');
+  // own colour per row (timeline) or line (graph), keyed by function id; empty = follows the widget / series palette
+  const [series, setSeries] = useState(() => ({ ...(base.series || {}) }));
   const [minWidth, setMinWidth] = useState(base.min_width ?? 1);
   const [aggr, setAggr] = useState(base.aggr || 'avg');
   const [showAll, setShowAll] = useState(false);
@@ -59,6 +62,14 @@ export function TimelineEditor({ group = 'timeline', raw, name: oldName, layoutE
     .filter((f) => !needle || [fnName(f), f.type, devName[String(f.meta?.device_id)]].some((s) => String(s || '').toLowerCase().includes(needle)))
     .sort((a, b) => fnName(a).localeCompare(fnName(b), 'sv'));
 
+  // what a row/line looks like without its own colour (same rules as the widgets)
+  const themeWidget = useMemo(() => getComputedStyle(document.documentElement).getPropertyValue('--data').trim() || '#0d3e53', []);
+  const order = raw.functions.filter((f) => selected.has(f.id) && !isHidden(f)).map((f) => f.id);
+  const fallbackOf = (f) =>
+    group === 'timeline'
+      ? safeColor(color) || themeWidget
+      : safeColor(f.meta?.[OBJ_META.color]) || SERIES_COLORS[Math.max(0, order.indexOf(f.id)) % SERIES_COLORS.length];
+
   const toggle = (id) =>
     setSelected((s) => {
       const n = new Set(s);
@@ -74,7 +85,10 @@ export function TimelineEditor({ group = 'timeline', raw, name: oldName, layoutE
     if (!selected.size) return setError('Välj minst en funktion.');
     setBusy(true);
     try {
-      await onSave(clean, [...selected], { hours: Number(hours), w: Number(w), h: Number(h), ...(group === 'timeline' ? { min_width: Math.max(0, Number(minWidth) || 0) } : { aggr }), ...(color ? { color } : {}) });
+      const bad = [color, ...Object.values(series)].find((c) => c && !safeColor(c));
+      if (bad) throw new Error(`"${bad}" är ingen giltig CSS-färg.`);
+      const own = Object.fromEntries(Object.entries(series).filter(([id, c]) => c && selected.has(Number(id))));
+      await onSave(clean, [...selected], { hours: Number(hours), w: Number(w), h: Number(h), ...(group === 'timeline' ? { min_width: Math.max(0, Number(minWidth) || 0) } : { aggr }), ...(color ? { color } : {}), series: own });
     } catch (e) {
       setError(errText(e));
       setBusy(false);
@@ -138,10 +152,17 @@ export function TimelineEditor({ group = 'timeline', raw, name: oldName, layoutE
             ))}
           </select>
         </Field>
-        <Field label="Färg">
-          <input value={color} onChange={(e) => setColor(e.target.value)} placeholder="standard" />
-        </Field>
       </div>
+      <Field
+        label="Färg"
+        help={
+          group === 'timeline'
+            ? 'Färg på alla rader i tidslinjen. Tomt = temats widgetfärg. En enskild rad kan få egen färg i listan nedan.'
+            : 'Färg på widgetens kant och ikon. Linjerna får var sin färg automatiskt, eller en egen färg i listan nedan.'
+        }
+      >
+        <ColorPicker value={color} onChange={setColor} />
+      </Field>
       {group === 'chart' && (
         <Field label="Sammanställning för längre intervall" help="För fönster längre än 6 h räknar IoT Open fram ett värde per tidsintervall (5 min vid 24 h, 30 min vid 7 d, 3 h vid 30 d, 1 dygn vid 1 år) med vald metod.">
           <select value={aggr} onChange={(e) => setAggr(e.target.value)}>
@@ -171,8 +192,11 @@ export function TimelineEditor({ group = 'timeline', raw, name: oldName, layoutE
       </div>
       <ul className="check-list">
         {list.map((f) => (
-          <li key={f.id}>
-            <label className="check">
+          <li key={f.id} className="row gap">
+            {selected.has(f.id) && (
+              <SeriesColor value={series[f.id] || ''} fallback={fallbackOf(f)} label={fnName(f)} onChange={(c) => setSeries((s) => ({ ...s, [f.id]: c }))} />
+            )}
+            <label className="check grow">
               <input type="checkbox" checked={selected.has(f.id)} onChange={() => toggle(f.id)} />
               <span>
                 {fnName(f)}

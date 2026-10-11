@@ -50,7 +50,8 @@ export function MultiChartWidget({ w, ctx, iid, single = false }) {
   const [hover, setHover] = useState(null);
   const dark = useDark();
   const palette = dark ? SERIES_COLORS_DARK : SERIES_COLORS;
-  const colorOf = (f, i) => (single ? 'var(--tile-color)' : safeColor(f.meta?.[OBJ_META.color]) || palette[i % palette.length]);
+  // own colour per line (layout "series") first, then the function's dashboard.color, then the series palette
+  const colorOf = (f, i) => (single ? 'var(--tile-color)' : safeColor(w.layout.series?.[f.id]) || safeColor(f.meta?.[OBJ_META.color]) || palette[i % palette.length]);
 
   useEffect(() => {
     if (!topics.length) return;
