@@ -12,7 +12,7 @@ The app has **no backend and no database of its own**:
 - **Live values** arrive over MQTT on a WebSocket (`/mqtt`) with the same token. Without MQTT everything is re-read over REST every 30 s. The header shows *Live* (green) or *Polling*.
 - **Changes in IoT Open** (devices, functions, installation metadata, files) arrive as `<client_id>/evt/<type>/updated` events, so nothing is polled while MQTT is connected.
 - **Control**: switches, set points and dimmers publish to `<client_id>/<topic_write>` (topics starting with `set/obj/…`).
-- **Container**: nginx (non-root, port 8080). It serves the app and proxies `/api/*` and `/mqtt` to one fixed IoT Open address (`LYNX_URL`), so with the default server the browser only talks to its own origin.
+- **Container**: nginx (non-root, port 8080). It serves the app and, by default (`API_MODE=proxy`), proxies `/api/*` and `/mqtt` to one fixed IoT Open address (`LYNX_URL`), so with the default server the browser only talks to its own origin. With `API_MODE=direct` the browser talks to `LYNX_URL` itself and the container only serves the app, see [Proxy or direct](#proxy-or-direct).
 
 See [SECURITY.md](SECURITY.md) for the security model and deployment checklist.
 
@@ -24,7 +24,7 @@ See [SECURITY.md](SECURITY.md) for the security model and deployment checklist.
 
 - **Browser**: the React app talks REST (`lynx.js`) and MQTT over WebSocket (`mqtt.js`) to its own origin, or directly to another IoT Open server chosen on the sign-in page.
 - **Reverse proxy** (optional, part of the deployment): TLS, an access gate and an optional sub-path.
-- **Container**: nginx serves the built app and proxies `/api/v2`, `/api/v3beta/log` and `/mqtt` to one fixed IoT Open address.
+- **Container**: nginx serves the built app and, in the default proxy mode, proxies `/api/v2`, `/api/v3beta/log` and `/mqtt` to one fixed IoT Open address.
 - **IoT Open (Lynx)** is the master for data, users, permissions and the dashboard configuration (metadata and `dashboard-layout.json`).
 - **Data sources** are whatever feeds the installation: a generic subsystem, an edge device, an AI sensor or similar, for example a Raspberry Pi with the [IoT Open Edge Client](https://lynx.iotopen.se/tech/guides/gateways/raspberrypi/), a gateway or an integration such as Home Assistant. They publish values to `obj/…` and act on `set/obj/…`. The dashboard never talks to them directly.
 
@@ -74,6 +74,20 @@ If the repository is private the package is private too. Then `docker login ghcr
 | `LIVE_UPDATES`            | `true`                    | `false` turns MQTT off; only polling is used                                                                                                                    |
 | `BASE_PATH`               | *(empty)*                 | Path prefix the container itself serves under, e.g. `/dashboard` (no trailing slash). Only needed when a reverse proxy forwards the prefix unchanged, see below |
 | `CUSTOM_SERVERS`          | `true`                    | `true` lets users type another IoT Open server on the sign-in page (saved in their browser; the CSP then allows `https:`/`wss:` connections). `false` = only `LYNX_URL` |
+| `API_MODE`                | `proxy`                   | `proxy`: the browser talks to this container, which relays `/api` and `/mqtt` to `LYNX_URL`. `direct`: the browser talks to `LYNX_URL` itself and the container only serves the app (`/api` and `/mqtt` answer 404) |
+
+### Proxy or direct
+
+With `API_MODE=proxy` (default) the browser only talks to the dashboard's own origin and nginx relays API and MQTT traffic to `LYNX_URL`. This works where browsers can reach the dashboard but not IoT Open, and IoT Open only sees the server's address.
+
+With `API_MODE=direct` the browser calls `LYNX_URL` itself, exactly as it does for a server typed on the sign-in page. TLS then runs end to end between the browser and IoT Open: passwords, tokens, API keys and MQTT traffic do not pass through the container or through a TLS-terminating proxy or tunnel in front of it (for example a CDN or Cloudflare Tunnel), and IoT Open applies its own rate limits per user. It requires that the browser can reach `LYNX_URL` and that IoT Open allows CORS from the dashboard's origin, which it does today. With `CUSTOM_SERVERS=false` the CSP `connect-src` then allows exactly `'self'` and `LYNX_URL` (https and wss).
+
+```yaml
+    environment:
+      LYNX_URL: https://lynx.iotopen.se
+      API_MODE: direct
+      CUSTOM_SERVERS: "false"   # optional: only LYNX_URL, narrowest CSP
+```
 
 ### Running under a sub-path
 

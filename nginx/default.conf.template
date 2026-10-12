@@ -7,11 +7,26 @@
 # Brute-force protection for the login endpoint: 10 attempts/minute per client IP (burst 5).
 limit_req_zone $binary_remote_addr zone=dash_auth:10m rate=10r/m;
 
-# CUSTOM_SERVERS=true lets users pick another IoT Open server on the sign-in page. The browser then talks
-# to that server directly, so the CSP must allow connections to other https/wss origins.
-map "${CUSTOM_SERVERS}" $dash_connect_src {
-    default  "'self'";
-    "true"   "'self' https: wss:";
+# API_MODE=direct: the browser talks to LYNX_URL itself (TLS end to end between browser and IoT Open).
+# This container then only serves the app: /api and /mqtt are not relayed but answer 404.
+map "${API_MODE}" $dash_relay {
+    default   1;
+    "direct"  0;
+}
+
+# wss:// form of LYNX_URL, for connect-src in direct mode
+map "${LYNX_URL}" $dash_lynx_ws {
+    default                        "";
+    "~^https://(?<lynxhost>.+)$"   "wss://$lynxhost";
+}
+
+# connect-src of the CSP. CUSTOM_SERVERS=true lets users pick another IoT Open server on the sign-in page and
+# the browser then talks to it directly, so any https/wss origin must be allowed. With CUSTOM_SERVERS=false
+# only this origin is allowed, plus exactly LYNX_URL in direct mode.
+map "${CUSTOM_SERVERS}:${API_MODE}" $dash_connect_src {
+    default         "'self'";
+    "~^true:"       "'self' https: wss:";
+    "false:direct"  "'self' ${LYNX_URL} $dash_lynx_ws";
 }
 
 map $http_upgrade $dash_is_websocket {
@@ -40,12 +55,15 @@ server {
         include /etc/nginx/snippets/security-headers.conf;
         default_type application/json;
         add_header Cache-Control "no-store";
-        return 200 '{"appTitle":"${APP_TITLE}","liveUpdates":"${LIVE_UPDATES}","lynxServer":"${LYNX_URL}","customServers":"${CUSTOM_SERVERS}"}';
+        return 200 '{"appTitle":"${APP_TITLE}","liveUpdates":"${LIVE_UPDATES}","lynxServer":"${LYNX_URL}","customServers":"${CUSTOM_SERVERS}","apiMode":"${API_MODE}"}';
     }
 
     # Relay to IoT Open. The upstream is FIXED (${LYNX_URL}, validated at start) – nothing in a
     # request can change it, so the proxy cannot be used for SSRF. The BASE_PATH prefix is removed.
     location = ${BASE_PATH}/api/v2/auth {
+        if ($dash_relay = 0) {
+            return 404;
+        }
         limit_req        zone=dash_auth burst=5 nodelay;
         limit_req_status 429;
         include          /etc/nginx/snippets/lynx-proxy.conf;
@@ -55,6 +73,9 @@ server {
     }
 
     location ^~ ${BASE_PATH}/api/v2/ {
+        if ($dash_relay = 0) {
+            return 404;
+        }
         include          /etc/nginx/snippets/lynx-proxy.conf;
         proxy_read_timeout 60s;
         client_max_body_size 16m;
@@ -63,6 +84,9 @@ server {
     }
 
     location ^~ ${BASE_PATH}/api/v3beta/log/ {
+        if ($dash_relay = 0) {
+            return 404;
+        }
         include          /etc/nginx/snippets/lynx-proxy.conf;
         proxy_read_timeout 60s;
         limit_except GET { deny all; }
@@ -76,6 +100,9 @@ server {
 
     # Live values: MQTT over WebSocket (the token is sent inside MQTT CONNECT). Exact path, upgrades only.
     location = ${BASE_PATH}/mqtt {
+        if ($dash_relay = 0) {
+            return 404;
+        }
         if ($dash_is_websocket = 0) {
             return 426;
         }

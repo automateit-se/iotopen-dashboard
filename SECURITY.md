@@ -11,12 +11,13 @@ The dashboard is a static single-page app. It has no backend, no database and no
 | Area | Measure |
 |---|---|
 | Proxy (SSRF) | nginx forwards only to one fixed `LYNX_URL`, set at start-up. Nothing in a request can change the target. The start-up script refuses a `LYNX_URL` with path, query, credentials, `http://` (unless explicitly allowed for the demo) or a host not in `ALLOWED_LYNX_HOSTS`, and a `BASE_PATH` with anything but plain path characters |
-| Proxy (surface) | Only `/api/v2/…`, `GET /api/v3beta/log/…` and `/mqtt` (WebSocket upgrades only) are forwarded; everything else under `/api/` returns 404 |
+| Proxy (surface) | Only `/api/v2/…`, `GET /api/v3beta/log/…` and `/mqtt` (WebSocket upgrades only) are forwarded; everything else under `/api/` returns 404. With `API_MODE=direct` nothing is forwarded and all of these return 404 |
+| Direct mode | With `API_MODE=direct` the browser talks to `LYNX_URL` itself, so TLS runs end to end between browser and IoT Open. Credentials and tokens never pass through the container or a TLS-terminating proxy in front of it, and the container cannot be used as a relay at all |
 | Upstream TLS | The certificate of IoT Open is verified (`proxy_ssl_verify on`, `proxy_ssl_verify_depth 3` so the full chain via the intermediate CA is accepted) |
 | Brute force | `/api/v2/auth` is rate limited to 10 requests/minute per client IP (burst 5) |
 | Forwarding headers | Client-supplied `X-Forwarded-*`/`Forwarded` are not passed on |
 | Custom server | With `CUSTOM_SERVERS=true` (default) a user may type another IoT Open server at sign-in. Only `https://` origins without credentials, path or query are accepted (`http://` only for `localhost`). The address is saved in that browser only after a successful sign-in and cannot be preset through a link or URL parameter. The container's proxy is not involved, so this does not open the proxy for SSRF |
-| Browser headers | `Content-Security-Policy` (scripts and images only from the same origin; connections from the same origin, plus any `https:`/`wss:` origin when `CUSTOM_SERVERS=true`; no objects; no framing by other sites), `X-Content-Type-Options`, `Referrer-Policy`, `X-Frame-Options`, `Permissions-Policy`, `Cross-Origin-Opener-Policy` |
+| Browser headers | `Content-Security-Policy` (scripts and images only from the same origin; connections from the same origin, plus any `https:`/`wss:` origin when `CUSTOM_SERVERS=true`, or exactly `LYNX_URL` with `CUSTOM_SERVERS=false` and `API_MODE=direct`; no objects; no framing by other sites), `X-Content-Type-Options`, `Referrer-Policy`, `X-Frame-Options`, `Permissions-Policy`, `Cross-Origin-Opener-Policy` |
 | XSS | All text from IoT Open (names, texts, metadata) is rendered by React, which escapes it. The code uses no `innerHTML`/`dangerouslySetInnerHTML`/`eval` |
 | CSS from metadata | Colours from metadata and the layout file are only applied if the browser accepts them as a CSS colour (`CSS.supports('color', …)`) |
 | Container | `nginx-unprivileged` (non-root), port 8080, health check, multi-stage build (no sources or `node_modules` in the image) |
@@ -25,7 +26,7 @@ The dashboard is a static single-page app. It has no backend, no database and no
 
 ## Operator checklist
 
-1. **Put TLS in front.** The container speaks plain HTTP on port 8080. Passwords, tokens and the MQTT connection (which carries the token) must only travel over HTTPS/WSS, so run it behind a TLS-terminating reverse proxy or load balancer. Add `Strict-Transport-Security` there.
+1. **Put TLS in front.** The container speaks plain HTTP on port 8080. Passwords, tokens and the MQTT connection (which carries the token) must only travel over HTTPS/WSS, so run it behind a TLS-terminating reverse proxy or load balancer. Add `Strict-Transport-Security` there. In proxy mode that reverse proxy sees credentials in clear text; if it is run by a third party (a CDN or tunnel service), consider `API_MODE=direct`.
 2. **Real client IPs.** Behind a load balancer, configure nginx `real_ip` (`set_real_ip_from` / `real_ip_header`), otherwise the login rate limit counts all users as one IP.
 3. **Least privilege accounts.**
    - Give the dashboard its own IoT Open account or API key – not shared with integrations (e.g. the Home Assistant integration) – so the IoT Open traceability log shows who wrote what.
@@ -35,8 +36,9 @@ The dashboard is a static single-page app. It has no backend, no database and no
 5. **Tokens in the browser.** The token is stored in `sessionStorage`, or in `localStorage` with *Remember me*. Anyone with access to the browser profile can use it. On shared devices: do not tick *Remember me*, and sign out. An API key does not expire and is **not revoked** by signing out – revoke it in IoT Open when a screen is retired or a device is lost.
 6. **Do not deploy the mock.** `mock/server.mjs` has fixed test credentials (`demo@example.com`/`demo`, `demo-api-key`). It is only started by the `demo` compose profile and is never part of the production image.
 7. **Keep secrets out of the project folder.** The project folder must not contain credential files. `*Account*.md`, the local change log and the branding source folder are excluded by `.gitignore` and `.dockerignore`, but files in a synced or shared folder (e.g. a public Nextcloud link) are still exposed. If a credential file has been in a shared folder, change that password or revoke that key.
-8. **Decide on custom servers.** If the dashboard should only ever be used with your own IoT Open instance, set `CUSTOM_SERVERS=false`. The server choice is then hidden and the CSP allows connections to the same origin only, which also limits where an injected script could send a token.
-9. **Pin and update the image.** Deploy a version tag (`:1.2.3`) rather than `:latest`, and rebuild regularly to pick up nginx/Alpine security updates.
+8. **Decide on proxy or direct.** `API_MODE=direct` keeps credentials end to end between browser and IoT Open and removes the relay. Keep `proxy` when browsers cannot reach IoT Open directly.
+9. **Decide on custom servers.** If the dashboard should only ever be used with your own IoT Open instance, set `CUSTOM_SERVERS=false`. The server choice is then hidden and the CSP allows connections to the same origin only, which also limits where an injected script could send a token.
+10. **Pin and update the image.** Deploy a version tag (`:1.2.3`) rather than `:latest`, and rebuild regularly to pick up nginx/Alpine security updates.
 
 ## Known limitations / possible improvements
 

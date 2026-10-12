@@ -58,6 +58,11 @@ if [ -n "$base" ]; then
 fi
 echo "BASE_PATH ok: '${base}'"
 
+case "${API_MODE:-proxy}" in
+  proxy | direct) echo "API_MODE ok: ${API_MODE:-proxy}" ;;
+  *) echo "ERROR: API_MODE='$API_MODE' rejected: use proxy or direct" >&2; exit 1 ;;
+esac
+
 case "${CUSTOM_SERVERS:-true}" in
   true | false) echo "CUSTOM_SERVERS ok: ${CUSTOM_SERVERS:-true}" ;;
   *) echo "ERROR: CUSTOM_SERVERS='$CUSTOM_SERVERS' rejected: use true or false" >&2; exit 1 ;;
