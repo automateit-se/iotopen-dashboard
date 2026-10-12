@@ -57,7 +57,7 @@ The mock (`mock/server.mjs`, no dependencies) implements the parts of the IoT Op
 - the tag `v1.2.3` gives `:1.2.3`, `:1.2` and `:latest`
 - pull requests are built but not published
 
-The version shown next to the title in the header is the tag for tagged builds (build argument `APP_VERSION`), otherwise `version` in `package.json`.
+The version shown next to the title in the header comes from the build argument `APP_VERSION`: the tag for a release, and the latest release tag for builds of `main` and pull requests. Local builds without it use `version` in `package.json`.
 
 ```bash
 docker run -d -p 8080:8080 -e LYNX_URL=https://lynx.iotopen.se ghcr.io/<owner>/<repo>:latest
