@@ -6,10 +6,11 @@ import { WidgetEditor } from '../components/WidgetEditor.jsx';
 import { AddWidget } from '../components/AddWidget.jsx';
 import { InstallationSettings } from '../components/InstallationSettings.jsx';
 import { TimelineEditor } from '../components/TimelineEditor.jsx';
+import { LinkEditor } from '../components/LinkEditor.jsx';
 import { worstStatus, staleOf, staleDevice } from '../lib/status.js';
 import { errText } from '../components/Modal.jsx';
 import { Icon } from '../components/icons.jsx';
-import { INST_META, OBJ_META, GROUPS, WIDGET_LABEL, THEME_META, applyTheme, isAdmin, writeLayout, writeObjectMeta, suggestType, widgetFunctions, fnName } from '../lib/dashboard.js';
+import { INST_META, OBJ_META, GROUPS, WIDGET_LABEL, THEME_META, applyTheme, isAdmin, writeLayout, writeObjectMeta, suggestType, widgetFunctions, fnName, stateColor, isLight, newLinkKey } from '../lib/dashboard.js';
 
 const LIVE_LABEL = { live: 'Live', connecting: 'Ansluter…', offline: 'Polling', failed: 'Polling', off: 'Polling' };
 
@@ -34,6 +35,7 @@ export default function Dashboard({ iid }) {
   const [editor, setEditor] = useState(null); // { kind, obj, isNew }
   const [adding, setAdding] = useState(false);
   const [timelineEditor, setTimelineEditor] = useState(null); // { group: 'timeline'|'chart', name } – name null = new
+  const [linkEditor, setLinkEditor] = useState(null); // { key } – key null = new
   const [settings, setSettings] = useState(false);
   const [dragKey, setDragKey] = useState(null);
   const [saveError, setSaveError] = useState('');
@@ -124,6 +126,29 @@ export default function Dashboard({ iid }) {
     await reload({ quiet: true });
   };
 
+  /** Link buttons (www) exist only in the layout file. */
+  const onSaveLink = async (key, params) => {
+    const all = { ...layout.widgets };
+    widgets.forEach((w, i) => (all[w.key] = { ...(all[w.key] || {}), order: i }));
+    const k = key || newLinkKey(layout);
+    all[k] = { ...(all[k] || { order: widgets.length }), ...params };
+    for (const p of ['color', 'icon']) if (!all[k][p]) delete all[k][p];
+    await writeLayout(iid, { ...layout, widgets: all });
+    setLinkEditor(null);
+    await reload({ quiet: true });
+  };
+
+  const onRemoveLink = async (key) => {
+    const all = { ...layout.widgets };
+    delete all[key];
+    await writeLayout(iid, { ...layout, widgets: all });
+    setLinkEditor(null);
+    await reload({ quiet: true });
+  };
+
+  const openEditor = (w) =>
+    GROUPS[w.kind] ? setTimelineEditor({ group: w.kind, name: w.name }) : w.kind === 'link' ? setLinkEditor({ key: w.key }) : setEditor({ kind: w.kind, obj: w.obj });
+
   const onDrop = (targetKey) => {
     if (!dragKey || dragKey === targetKey) return setDragKey(null);
     const keys = widgets.map((w) => w.key);
@@ -213,11 +238,17 @@ export default function Dashboard({ iid }) {
             // silent (metric_monitor.status > 0): greyed out; its stale value does not drive Warning/Critical
             const stale = w.kind === 'function' ? staleOf(w.obj, raw) : w.kind === 'device' ? staleDevice(w.obj) : null;
             const st = stale ? null : worstStatus(widgetFunctions(w, raw).filter((f) => !staleOf(f, raw)).map((f) => [f, ctx.valueOf(f)?.value]));
+            // value widget: dashboard.color_<state> fills the tile (e.g. a banner "Larmat" in red); a Warning/Critical status wins
+            const fill = w.type === 'value' && !stale && !(st && st.level > 0) ? stateColor(w.obj, ctx.valueOf(w.obj)?.value) : '';
+            const h = Number(w.layout.h) || 1;
+            // the button itself carries the name for link and push buttons
+            const bare = w.type === 'www' || w.type === 'button';
             return (
               <section
                 key={w.key}
-                className={`tile ${editing ? 'editing' : ''} ${dragKey === w.key ? 'dragging' : ''} ${w.hidden ? 'is-hidden' : ''} ${st && st.level > 0 ? `status-${st.level}` : ''} ${stale ? 'stale' : ''}`}
-                style={{ gridColumn: `span ${Math.min(w.layout.w || 1, cols)}`, gridRow: `span ${w.layout.h || 1}`, '--tile-color': w.color || undefined }}
+                className={`tile ${editing ? 'editing' : ''} ${dragKey === w.key ? 'dragging' : ''} ${w.hidden ? 'is-hidden' : ''} ${st && st.level > 0 ? `status-${st.level}` : ''} ${stale ? 'stale' : ''} ${h < 1 ? 'half' : ''} ${fill ? 'filled' : ''} ${bare ? 'bare' : ''}`}
+                // the grid has half rows: h = 0.5 is one of them, h = 1 two (plus the gap between)
+                style={{ gridColumn: `span ${Math.min(w.layout.w || 1, cols)}`, gridRow: `span ${Math.max(1, Math.round(h * 2))}`, '--tile-color': w.color || undefined, ...(fill ? { '--fill': fill, '--fill-text': isLight(fill) ? '#0d2e3d' : '#ffffff' } : {}) }}
                 draggable={editing}
                 onDragStart={(e) => {
                   setDragKey(w.key);
@@ -231,8 +262,8 @@ export default function Dashboard({ iid }) {
                 onDragEnd={() => setDragKey(null)}
               >
                 <header>
-                  {w.icon && <Icon name={w.icon} size={18} className="tile-icon" />}
-                  <h3 title={w.name}>{w.name}</h3>
+                  {w.icon && !bare && <Icon name={w.icon} size={18} className="tile-icon" />}
+                  {bare ? <span className="grow" /> : <h3 title={w.name}>{w.name}</h3>}
                   {stale && (
                     <span className="stale-badge" title={`metric_monitor: ${stale.text}`}>
                       Tyst
@@ -253,7 +284,7 @@ export default function Dashboard({ iid }) {
                       <button
                         type="button"
                         className="icon-btn"
-                        onClick={() => (GROUPS[w.kind] ? setTimelineEditor({ group: w.kind, name: w.name }) : setEditor({ kind: w.kind, obj: w.obj }))}
+                        onClick={() => openEditor(w)}
                         aria-label={`Redigera ${w.name}`}
                       >
                         <Icon name="settings" size={16} />
@@ -277,9 +308,13 @@ export default function Dashboard({ iid }) {
             setAdding(false);
             setTimelineEditor({ group, name: null });
           }}
-          onPick={(c) => {
+          onNewLink={() => {
             setAdding(false);
-            setEditor({ kind: c.kind, obj: c.obj, isNew: true });
+            setLinkEditor({ key: null });
+          }}
+          onPick={(c, type) => {
+            setAdding(false);
+            setEditor({ kind: c.kind, obj: c.obj, isNew: true, type });
           }}
         />
       )}
@@ -288,7 +323,7 @@ export default function Dashboard({ iid }) {
           kind={editor.kind}
           obj={editor.obj}
           isNew={editor.isNew}
-          layoutEntry={{ ...(layout.widgets[`${editor.kind === 'device' ? 'd' : 'f'}:${editor.obj.id}`] || {}), ...(editor.isNew ? { suggested: suggestType(editor.kind, editor.obj) } : {}) }}
+          layoutEntry={{ ...(layout.widgets[`${editor.kind === 'device' ? 'd' : 'f'}:${editor.obj.id}`] || {}), ...(editor.isNew ? { suggested: editor.type || suggestType(editor.kind, editor.obj) } : {}) }}
           onClose={() => setEditor(null)}
           onSave={(meta, params) => onSaveWidget(editor.kind, editor.obj, meta, params)}
           onRemove={() => onRemoveWidget(editor.kind, editor.obj)}
@@ -304,6 +339,14 @@ export default function Dashboard({ iid }) {
           onClose={() => setTimelineEditor(null)}
           onSave={(name, ids, params) => onSaveGroup(timelineEditor.group, timelineEditor.name, name, ids, params)}
           onRemove={() => onRemoveGroup(timelineEditor.group, timelineEditor.name)}
+        />
+      )}
+      {linkEditor && (
+        <LinkEditor
+          entry={linkEditor.key ? layout.widgets[linkEditor.key] : null}
+          onClose={() => setLinkEditor(null)}
+          onSave={(params) => onSaveLink(linkEditor.key, params)}
+          onRemove={() => onRemoveLink(linkEditor.key)}
         />
       )}
       {settings && inst && (

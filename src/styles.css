@@ -189,7 +189,8 @@ input:focus, select:focus, button:focus-visible { outline: 2px solid var(--accen
 .inst svg { color: var(--accent); }
 
 /* ---- dashboard grid ---- */
-.grid { display: grid; gap: 14px; grid-auto-rows: 132px; grid-auto-flow: dense; }
+/* half rows: h = 1 spans two of them plus the gap, so a full row is still 132 px and h = 0.5 is possible */
+.grid { display: grid; gap: 14px; grid-auto-rows: 59px; grid-auto-flow: dense; }
 .tile {
   --tile-color: var(--data);
   position: relative; display: flex; flex-direction: column; min-width: 0; overflow: hidden;
@@ -378,3 +379,77 @@ input[aria-invalid='true'] { border-color: var(--danger); }
   font: inherit; color: var(--text); padding: 9px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); cursor: pointer;
 }
 .pick-list button:hover { border-color: var(--accent); }
+
+/* ---- add widget: miniatures and devices ---- */
+.add-hint { margin: 4px 0 8px; }
+.thumbs { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 6px; margin-bottom: 14px; }
+.thumb {
+  display: grid; justify-items: center; gap: 2px; padding: 6px 4px 5px; font: inherit; font-size: 11.5px; color: var(--muted);
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px; cursor: pointer;
+}
+.thumb:hover { border-color: var(--accent); color: var(--text); }
+.thumb.on { border-color: var(--accent); background: var(--info-bg); color: var(--text); font-weight: 600; }
+.widget-thumb { width: 56px; height: 35px; display: block; }
+.widget-thumb .th-text { font: 700 15px system-ui, sans-serif; fill: var(--data); }
+.widget-thumb .th-line { fill: none; stroke: var(--data); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.widget-thumb .th-track { fill: none; stroke: var(--surface-2); stroke-width: 5; stroke-linecap: round; }
+.widget-thumb .th-fill { fill: var(--data); }
+.widget-thumb .th-off { fill: var(--off); opacity: 0.6; }
+.widget-thumb .th-knob { fill: #fff; }
+.widget-thumb .th-knob-line { fill: none; stroke: #fff; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.dev-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 4px; }
+.dev-head {
+  width: 100%; display: flex; align-items: center; gap: 8px; text-align: left; font: inherit; color: var(--text);
+  padding: 9px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-2); cursor: pointer;
+}
+.dev-head:hover { border-color: var(--accent); }
+.dev-head .chev { transform: rotate(180deg); transition: transform 0.15s; color: var(--muted); flex: none; }
+.dev-list li.open > .dev-head .chev { transform: rotate(-90deg); }
+.dev-list .pick-list { margin: 4px 0 6px 18px; }
+.link-btn.small { font-size: 12.5px; }
+
+/* ---- half-height tiles (h = 0.5), e.g. a banner: name and value on one line ---- */
+.tile.half { flex-direction: row; align-items: center; gap: 12px; padding: 6px 14px; }
+.tile.half header { flex: 0 1 auto; min-width: 0; max-width: 45%; }
+.tile.half.bare header { max-width: none; flex: none; order: 2; }
+.tile.half .tile-body { flex-direction: row; align-items: center; min-width: 0; }
+.tile.half .w-value { display: flex; align-items: baseline; justify-content: center; gap: 10px; width: 100%; }
+.tile.half .big { font-size: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile.half .w-value .muted, .tile.half .w-switch .muted, .tile.half .w-status .muted, .tile.half .w-button .muted { display: none; }
+.tile.half .mid { font-size: 15px; }
+.tile.half .w-button, .tile.half .w-link { flex-direction: row; width: 100%; }
+.tile.half .push, .tile.half .link-btn-big { padding: 4px 12px; min-height: 0; }
+/* the bare widgets (link and push button) carry their own name; the header only has the edit controls */
+.tile.bare:not(.editing) header { display: none; }
+
+/* ---- value widget filled with its state colour (dashboard.color_<state>) ---- */
+.tile.filled {
+  background: var(--fill); border-color: var(--fill); color: var(--fill-text);
+  --text: var(--fill-text); --muted: color-mix(in srgb, var(--fill-text) 78%, transparent); --border: color-mix(in srgb, var(--fill-text) 25%, transparent);
+  --tile-color: var(--fill-text) !important;
+}
+.tile.filled::before { display: none; }
+.tile.filled .icon-btn, .tile.filled .tile-icon { color: inherit; }
+
+/* ---- push button and link button ---- */
+.w-button, .w-link { display: flex; flex-direction: column; align-items: stretch; justify-content: center; gap: 4px; height: 100%; }
+.push, .link-btn-big {
+  display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 44px; padding: 8px 14px;
+  font: inherit; font-weight: 650; border-radius: 10px; border: 0; cursor: pointer; user-select: none; -webkit-user-select: none;
+  background: var(--tile-color); color: var(--surface); text-align: center;
+}
+.push { touch-action: none; transition: transform 0.06s, filter 0.06s; box-shadow: 0 3px 0 color-mix(in srgb, var(--tile-color) 60%, #000); }
+.push.down { transform: translateY(2px); box-shadow: 0 1px 0 color-mix(in srgb, var(--tile-color) 60%, #000); filter: brightness(1.15); }
+.push:disabled { opacity: 0.45; cursor: not-allowed; }
+.push span, .link-btn-big span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.link-btn-big:hover, .push:hover:not(:disabled) { filter: brightness(1.08); }
+.w-button .muted { text-align: center; }
+
+/* ---- widget editor: states ---- */
+.state-rows { display: grid; gap: 6px; }
+.state-row { display: grid; grid-template-columns: 1fr 1.6fr auto auto; gap: 6px; align-items: center; }
+.state-row input { padding: 6px 8px; }
+.small-btn { justify-self: start; padding: 4px 10px; font-size: 13px; }
+
+/* ---- version in the header ---- */
+.app-version { font-size: 11.5px; font-weight: 500; color: var(--topbar-muted, var(--brand-light)); opacity: 0.85; letter-spacing: 0.02em; }

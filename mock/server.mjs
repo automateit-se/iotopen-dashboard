@@ -84,6 +84,16 @@ function signal(iid, topic, gen) {
   fn(iid, pir, 'boolean_text', 'Sabotage hall', 'obj/zwave/40/tamper', { visible: 'false' });
   const leak = dev(iid, 'leak_sensor', 'Läckagevakt kök');
   fn(iid, leak, 'leak', 'Läckage kök', 'obj/zwave/41/leak', { 'dashboard.timeline': 'Händelser' });
+  // alarm panel: a value widget used as a banner, text and colour per state
+  const alarm = dev(iid, 'alarm_panel', 'Larmcentral');
+  fn(iid, alarm, 'alarm', 'Larm', 'obj/alarm/1/state', {
+    topic_write: 'set/obj/alarm/1/state', state_disarmed: '0', text_disarmed: 'Avlarmat', state_armed_home: '1', text_armed_home: 'Skalskydd', state_armed: '2', text_armed: 'Larmat',
+    'dashboard.color_disarmed': '#16a34a', 'dashboard.color_armed_home': '#f6a53e', 'dashboard.color_armed': '#dc2626', 'dashboard.widget': 'value', 'dashboard.icon': 'lock',
+  });
+  setStatus({ client_id: 5001, installation_id: iid, topic: 'obj/alarm/1/state', value: 2, msg: '', timestamp: now() - 300 });
+  // door bell: a push button that sends 1 while held and 0 when released
+  const bell = dev(iid, 'doorbell', 'Dörrklocka');
+  fn(iid, bell, 'button', 'Ringklocka', 'obj/bell/1/state', { topic_write: 'set/obj/bell/1/state', 'dashboard.press': '1', 'dashboard.release': '0' });
   signal(iid, 'obj/zwave/40/motion', (ts) => (new Date(ts * 1000).getHours() >= 7 && new Date(ts * 1000).getHours() <= 18 && Math.random() < 0.45 ? 1 : 0));
   signal(iid, 'obj/zwave/40/tamper', () => 0);
   signal(iid, 'obj/zwave/41/leak', (ts) => (ts % 86400 > 30000 && ts % 86400 < 33000 ? 1 : 0));
@@ -106,6 +116,15 @@ function signal(iid, topic, gen) {
   fn(iid, s, 'humidity', 'Fukt lager', 'obj/lager/1/humidity', { format: '%d %%' });
   const port = dev(iid, 'door_sensor', 'Lastport');
   fn(iid, port, 'door', 'Lastport', 'obj/lager/2/door', { state_on: '1', state_off: '0', text_on: 'Öppen', text_off: 'Stängd' });
+  const kitchen = dev(iid, 'light', 'Kökslampa');
+  fn(iid, kitchen, 'switch', 'Kökslampa', 'obj/lager/3/state', { topic_write: 'set/obj/lager/3/state', state_on: '1', state_off: '0' });
+  fn(iid, kitchen, 'dimmer', 'Kökslampa nivå', 'obj/lager/3/level', { topic_write: 'set/obj/lager/3/level', min: '0', max: '100', unit: '%' });
+  fn(iid, kitchen, 'power', 'Kökslampa effekt', 'obj/lager/3/power', { format: '%d W' });
+  const plug = dev(iid, 'plug', 'Uttag kontor');
+  fn(iid, plug, 'switch', 'Uttag kontor', 'obj/lager/4/state', { topic_write: 'set/obj/lager/4/state', state_on: '1', state_off: '0' });
+  const gate = dev(iid, 'gate', 'Grind');
+  fn(iid, gate, 'button', 'Öppna grind', 'obj/lager/5/open', { topic_write: 'set/obj/lager/5/open' });
+  for (const [topic, v] of [['obj/lager/3/state', 1], ['obj/lager/3/level', 60], ['obj/lager/3/power', 9], ['obj/lager/4/state', 0]]) setStatus({ client_id: 5002, installation_id: iid, topic, value: v, msg: '', timestamp: now() - 600 });
   signal(iid, 'obj/lager/1/temp', (ts) => 12 + 2 * Math.sin(ts / 15000));
   signal(iid, 'obj/lager/1/humidity', (ts) => Math.round(60 + 5 * Math.sin(ts / 25000)));
   signal(iid, 'obj/lager/2/door', () => (Math.random() < 0.3 ? 1 : 0));

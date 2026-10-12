@@ -1,36 +1,72 @@
 import { useMemo, useState } from 'react';
 import { Modal } from './Modal.jsx';
 import { Icon } from './icons.jsx';
-import { candidates, isHidden } from '../lib/dashboard.js';
+import { WidgetThumb } from './WidgetThumb.jsx';
+import { candidates, isHidden, fitsType, devName as deviceName, WIDGET_LABEL } from '../lib/dashboard.js';
 import { formatValue } from '../lib/format.js';
 
-/** Lists devices and functions that are not on the dashboard yet. */
-export function AddWidget({ raw, valueOf, onPick, onNewGroup, onClose }) {
+// the miniatures under the hint: what can be made from a function or device
+const THUMBS = ['value', 'chart', 'gauge', 'switch', 'status', 'number', 'button', 'card'];
+
+/**
+ * Lists what is not on the dashboard yet, grouped per device: click a device to open it and pick one of its
+ * functions (or the whole device as a card). Search and the miniatures narrow the list.
+ */
+export function AddWidget({ raw, valueOf, onPick, onNewGroup, onNewLink, onClose }) {
   const [q, setQ] = useState('');
+  const [type, setType] = useState('');
+  const [open, setOpen] = useState(() => new Set());
   const [showHidden, setShowHidden] = useState(false);
   const all = useMemo(() => candidates(raw), [raw]);
   const hiddenCount = all.filter((c) => isHidden(c.obj)).length;
-  const list = showHidden ? all : all.filter((c) => !isHidden(c.obj));
-  const devName = useMemo(() => Object.fromEntries(raw.devices.map((d) => [String(d.id), d.meta?.name || d.type || `Enhet ${d.id}`])), [raw]);
+  const list = (showHidden ? all : all.filter((c) => !isHidden(c.obj))).filter((c) => !type || fitsType(type, c.kind, c.obj));
   const needle = q.trim().toLowerCase();
-  const shown = list.filter(
-    (c) => !needle || [c.name, c.obj.type, c.obj.meta?.topic_read, devName[String(c.obj.meta?.device_id)]].some((s) => String(s || '').toLowerCase().includes(needle)),
-  );
-  const devices = shown.filter((c) => c.kind === 'device');
-  const functions = shown.filter((c) => c.kind === 'function');
+  const hit = (...s) => !needle || s.some((x) => String(x || '').toLowerCase().includes(needle));
 
-  const Row = ({ c }) => (
+  // one group per device (plus "Utan enhet"); a device whose name matches shows all its functions
+  const groups = useMemo(() => {
+    const byId = new Map(raw.devices.map((d) => [String(d.id), d]));
+    const map = new Map();
+    const group = (id) => {
+      if (!map.has(id)) map.set(id, { id, dev: byId.get(id) || null, card: null, fns: [] });
+      return map.get(id);
+    };
+    for (const c of list) {
+      if (c.kind === 'device') group(String(c.obj.id)).card = c;
+      else group(byId.has(String(c.obj.meta?.device_id)) ? String(c.obj.meta.device_id) : '').fns.push(c);
+    }
+    return [...map.values()]
+      .map((g) => {
+        const name = g.dev ? deviceName(g.dev) : 'Utan enhet';
+        const devHit = !!g.dev && hit(name, g.dev.type);
+        return {
+          ...g,
+          name,
+          card: g.card && (devHit || hit(g.card.name)) ? g.card : null,
+          fns: g.fns.filter((c) => devHit || hit(c.name, c.obj.type, c.obj.meta?.topic_read)),
+        };
+      })
+      .filter((g) => g.card || g.fns.length)
+      .sort((a, b) => (!a.dev - !b.dev) || a.name.localeCompare(b.name, 'sv'));
+  }, [list, raw, needle]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const toggle = (id) =>
+    setOpen((s) => {
+      const n = new Set(s);
+      n.has(id) ? n.delete(id) : n.add(id);
+      return n;
+    });
+  // a single match is opened right away
+  const isOpen = (g) => open.has(g.id) || groups.length === 1;
+
+  const FnRow = ({ c }) => (
     <li>
-      <button type="button" onClick={() => onPick(c)}>
+      <button type="button" onClick={() => onPick(c, type || undefined)}>
         <span>
           <strong>{c.name}</strong>
-          <span className="muted small">
-            {' '}
-            · {c.obj.type || '–'}
-            {c.kind === 'function' && c.obj.meta?.device_id && devName[String(c.obj.meta.device_id)] ? ` · ${devName[String(c.obj.meta.device_id)]}` : ''}
-          </span>
+          <span className="muted small"> · {c.obj.type || '-'}</span>
         </span>
-        {c.kind === 'function' && <span className="muted small">{formatValue(c.obj, valueOf(c.obj)?.value)}</span>}
+        <span className="muted small">{formatValue(c.obj, valueOf(c.obj)?.value)}</span>
       </button>
     </li>
   );
@@ -44,35 +80,72 @@ export function AddWidget({ raw, valueOf, onPick, onNewGroup, onClose }) {
         <button type="button" className="btn block-left" onClick={() => onNewGroup('timeline')}>
           <Icon name="chart" size={16} /> Ny tidslinje för på/av, öppet/stängt, rörelse…
         </button>
+        <button type="button" className="btn block-left" onClick={onNewLink}>
+          <Icon name="link" size={16} /> Ny länkknapp (www) till en annan webbsida
+        </button>
       </div>
       <p className="muted small add-hint">
-        Övriga widgets (värde, graf, <strong>mätare</strong>, brytare, status, börvärde, enhetskort): välj först en funktion eller enhet nedan, sedan typ i nästa steg.
+        Övriga widgets (värde, graf, mätare, brytare, status, börvärde, tryckknapp, enhetskort): välj först en funktion eller enhet nedan, sedan typ i nästa steg.
+        Klicka på en miniatyr för att bara se det som passar.
       </p>
+      <div className="thumbs" role="group" aria-label="Widgettyper">
+        {THUMBS.map((t) => (
+          <button key={t} type="button" className={`thumb ${type === t ? 'on' : ''}`} onClick={() => setType(type === t ? '' : t)} aria-pressed={type === t} title={type === t ? 'Visa alla igen' : `Visa det som kan bli ${WIDGET_LABEL[t].toLowerCase()}`}>
+            <WidgetThumb type={t} />
+            <span>{WIDGET_LABEL[t]}</span>
+          </button>
+        ))}
+      </div>
       <div className="row gap wrap">
-        <input className="search grow" placeholder="Sök namn, typ eller topic…" value={q} onChange={(e) => setQ(e.target.value)} autoFocus />
+        <input className="search grow" placeholder="Sök enhet, funktion, typ eller topic…" value={q} onChange={(e) => setQ(e.target.value)} autoFocus />
         {hiddenCount > 0 && (
           <label className="check small" title='Funktioner och enheter med meta visible = "false"'>
             <input type="checkbox" checked={showHidden} onChange={(e) => setShowHidden(e.target.checked)} /> Visa dolda ({hiddenCount})
           </label>
         )}
       </div>
-      {!list.length && <p className="muted">Alla enheter och funktioner finns redan på dashboarden.</p>}
-      {!!functions.length && (
-        <>
-          <h3>Funktioner ({functions.length})</h3>
-          <ul className="pick-list">
-            {functions.map((c) => (
-              <Row key={`f${c.obj.id}`} c={c} />
-            ))}
-          </ul>
-        </>
+      {type && (
+        <p className="muted small add-hint">
+          Visar bara det som kan bli <strong>{WIDGET_LABEL[type].toLowerCase()}</strong>.{' '}
+          <button type="button" className="link-btn small" onClick={() => setType('')}>
+            Visa alla
+          </button>
+        </p>
       )}
-      {!!devices.length && (
+      {!all.length && <p className="muted">Alla enheter och funktioner finns redan på dashboarden.</p>}
+      {!!all.length && !groups.length && <p className="muted">Inget matchar.</p>}
+      {!!groups.length && (
         <>
-          <h3>Enheter ({devices.length})</h3>
-          <ul className="pick-list">
-            {devices.map((c) => (
-              <Row key={`d${c.obj.id}`} c={c} />
+          <h3>Enheter ({groups.length})</h3>
+          <ul className="dev-list">
+            {groups.map((g) => (
+              <li key={g.id || 'none'} className={isOpen(g) ? 'open' : ''}>
+                <button type="button" className="dev-head" onClick={() => toggle(g.id)} aria-expanded={isOpen(g)}>
+                  <Icon name="back" size={14} className="chev" />
+                  <strong>{g.name}</strong>
+                  <span className="muted small grow">
+                    {g.dev?.type ? ` · ${g.dev.type}` : ''}
+                    {g.fns.length ? ` · ${g.fns.length} ${g.fns.length === 1 ? 'funktion' : 'funktioner'}` : ' · som enhetskort'}
+                  </span>
+                </button>
+                {isOpen(g) && (
+                  <ul className="pick-list">
+                    {g.card && (
+                      <li>
+                        <button type="button" onClick={() => onPick(g.card, 'card')}>
+                          <span>
+                            <strong>Hela enheten som enhetskort</strong>
+                            <span className="muted small"> · alla funktioner i ett kort</span>
+                          </span>
+                        </button>
+                      </li>
+                    )}
+                    {g.fns.map((c) => (
+                      <FnRow key={c.obj.id} c={c} />
+                    ))}
+                  </ul>
+                )}
+              </li>
             ))}
           </ul>
         </>

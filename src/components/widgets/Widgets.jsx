@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { formatValue, formatAge, isOn, onOffValues } from '../../lib/format.js';
-import { fnName, writeTopic, onOffTopics, rangeOf, isBinary, isHidden } from '../../lib/dashboard.js';
+import { fnName, writeTopic, onOffTopics, rangeOf, isBinary, isHidden, stateColor, safeUrl, OBJ_META } from '../../lib/dashboard.js';
+import { Icon } from '../icons.jsx';
 import { TimelineWidget } from './Timeline.jsx';
 import { MultiChartWidget } from './MultiChart.jsx';
 import { statusOf, staleProps } from '../../lib/status.js';
@@ -27,9 +28,11 @@ export function StatusWidget({ w, ctx }) {
   const v = ctx.valueOf(w.obj);
   const has = v && v.value !== undefined && v.value !== null;
   const on = has && isOn(w.obj, v.value);
+  // dashboard.color_<state> colours the dot, e.g. red for "Larmat"
+  const color = has ? stateColor(w.obj, v.value) : '';
   return (
     <div className="w-status">
-      <span className={`dot ${has ? (on ? 'on' : 'off') : 'none'}`} />
+      <span className={`dot ${has ? (on ? 'on' : 'off') : 'none'}`} style={color ? { background: color, boxShadow: `0 0 0 4px color-mix(in srgb, ${color} 22%, transparent)` } : undefined} />
       <div>
         <div className="big">{has ? formatValue(w.obj, v.value) : '–'}</div>
         <div className="muted small">{v?.msg || formatAge(v?.timestamp)}</div>
@@ -146,6 +149,80 @@ export function NumberWidget({ w, ctx }) {
   );
 }
 
+// ---- push button (momentary, e.g. a door bell) ------------------------------------------------
+/**
+ * Sends dashboard.press (default 1) to topic_write when pressed and dashboard.release, if set, when released.
+ * Works with mouse, touch and keyboard (space/enter); leaving the button while held counts as a release.
+ */
+export function ButtonWidget({ w, ctx }) {
+  const fn = w.obj;
+  const write = writeTopic(fn);
+  const press = String(fn.meta?.[OBJ_META.press] ?? '').trim() || '1';
+  const release = String(fn.meta?.[OBJ_META.release] ?? '').trim();
+  const [down, setDown] = useState(false);
+  const [err, setErr] = useState('');
+  const held = useRef(false);
+  const v = ctx.valueOf(fn);
+
+  const start = () => {
+    if (held.current) return;
+    if (!write) return setErr('Funktionen saknar topic_write');
+    if (!ctx.publish(write, press)) return setErr('Ingen MQTT-anslutning');
+    held.current = true;
+    setErr('');
+    setDown(true);
+  };
+  const end = () => {
+    if (!held.current) return;
+    held.current = false;
+    setDown(false);
+    if (release !== '' && !ctx.publish(write, release)) setErr('Ingen MQTT-anslutning');
+  };
+  const key = (e) => (e.key === ' ' || e.key === 'Enter') && (e.preventDefault(), e.type === 'keydown' ? !e.repeat && start() : end());
+
+  return (
+    <div className="w-button">
+      <button
+        type="button"
+        className={`push ${down ? 'down' : ''}`}
+        disabled={!write}
+        title={write ? `Skickar ${press}${release !== '' ? `, ${release} när den släpps` : ''}` : 'Saknar topic_write'}
+        aria-pressed={down}
+        onPointerDown={(e) => {
+          e.currentTarget.setPointerCapture?.(e.pointerId);
+          start();
+        }}
+        onPointerUp={end}
+        onPointerCancel={end}
+        onLostPointerCapture={end}
+        onKeyDown={key}
+        onKeyUp={key}
+        onBlur={end}
+        onContextMenu={(e) => e.preventDefault()}
+      >
+        <Icon name={w.icon || 'bell'} size={20} />
+        <span>{fnName(fn)}</span>
+      </button>
+      {err ? <span className="err small">{err}</span> : v && <span className="muted small">{formatValue(fn, v.value)} · {formatAge(v.timestamp)}</span>}
+    </div>
+  );
+}
+
+// ---- link button (www) ---------------------------------------------------------------------------
+export function LinkWidget({ w }) {
+  const url = safeUrl(w.layout.url);
+  if (!url) return <div className="muted small">Ingen giltig webbadress (http/https).</div>;
+  const newTab = w.layout.newTab !== false;
+  return (
+    <div className="w-link">
+      <a className="link-btn-big" href={url} target={newTab ? '_blank' : undefined} rel="noopener noreferrer">
+        <Icon name={w.icon || 'link'} size={18} />
+        <span>{w.name}</span>
+      </a>
+    </div>
+  );
+}
+
 // ---- gauge ---------------------------------------------------------------------------------
 export function GaugeWidget({ w, ctx }) {
   const v = ctx.valueOf(w.obj);
@@ -213,6 +290,8 @@ export const WIDGET_COMPONENTS = {
   status: StatusWidget,
   switch: SwitchWidget,
   number: NumberWidget,
+  button: ButtonWidget,
+  www: LinkWidget,
   gauge: GaugeWidget,
   chart: ChartWidget,
   card: CardWidget,

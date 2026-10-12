@@ -1,0 +1,60 @@
+// Miniature drawings of the widget types, shown in "Lägg till widget" so it is easy to see what can be made.
+// Colours follow the theme: --data for the widget colour, --off / --surface-2 for the inactive parts.
+
+const DRAW = {
+  value: (
+    <text x="32" y="27" textAnchor="middle" className="th-text">
+      21,5°
+    </text>
+  ),
+  chart: <path d="M6 30 L16 22 L24 26 L34 12 L44 18 L58 8" className="th-line" />,
+  gauge: (
+    <>
+      <path d="M14 32 A18 18 0 0 1 50 32" className="th-track" />
+      <path d="M14 32 A18 18 0 0 1 41 16.4" className="th-line" />
+    </>
+  ),
+  switch: (
+    <>
+      <rect x="18" y="12" width="28" height="16" rx="8" className="th-fill" />
+      <circle cx="38" cy="20" r="5.5" className="th-knob" />
+    </>
+  ),
+  status: (
+    <>
+      <circle cx="20" cy="20" r="6" className="th-fill" />
+      <rect x="31" y="16" width="22" height="8" rx="2" className="th-off" />
+    </>
+  ),
+  number: (
+    <>
+      <rect x="8" y="18.5" width="48" height="3" rx="1.5" className="th-off" />
+      <rect x="8" y="18.5" width="30" height="3" rx="1.5" className="th-fill" />
+      <circle cx="38" cy="20" r="5" className="th-fill" />
+    </>
+  ),
+  button: (
+    <>
+      <circle cx="32" cy="20" r="13" className="th-fill" />
+      <path d="M27 21a5 5 0 0 1 10 0c0 3 1.5 4 1.5 4h-13s1.5-1 1.5-4M31 27.5a1.2 1.2 0 0 0 2 0" className="th-knob-line" />
+    </>
+  ),
+  card: (
+    <>
+      {[10, 20, 30].map((y) => (
+        <g key={y}>
+          <rect x="8" y={y - 2} width="22" height="4" rx="2" className="th-off" />
+          <rect x="40" y={y - 2} width="16" height="4" rx="2" className="th-fill" />
+        </g>
+      ))}
+    </>
+  ),
+};
+
+export function WidgetThumb({ type }) {
+  return (
+    <svg className="widget-thumb" viewBox="0 0 64 40" aria-hidden="true">
+      {DRAW[type]}
+    </svg>
+  );
+}

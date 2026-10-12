@@ -4,8 +4,23 @@ import { Icon, ICON_NAMES } from './icons.jsx';
 import { RANGE_OPTIONS } from './widgets/RangePicker.jsx';
 import { AGGR_METHODS } from '../lib/history.js';
 import { STATUS_META, STATUS_TEXT, parseLimits } from '../lib/status.js';
-import { FUNCTION_WIDGETS, DEVICE_WIDGETS, DEFAULT_LAYOUT, OBJ_META, WIDTH_OPTIONS, writeTopic, isHidden } from '../lib/dashboard.js';
-import { ColorPicker } from './ColorPicker.jsx';
+import { FUNCTION_WIDGETS, DEVICE_WIDGETS, DEFAULT_LAYOUT, OBJ_META, WIDTH_OPTIONS, HALF_HEIGHT_TYPES, heightOptions, writeTopic, isHidden, stateColorKey } from '../lib/dashboard.js';
+import { stateMap } from '../lib/format.js';
+import { ColorPicker, SeriesColor } from './ColorPicker.jsx';
+
+/** state_<key> name for a new row: from the text (a-z, 0-9, _), else the value; unique among the rows. */
+function newStateKey(row, rows) {
+  const base =
+    String(row.text || row.value)
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '') || 'state';
+  let key = base;
+  for (let n = 2; rows.some((r) => r !== row && r.key === key); n++) key = `${base}_${n}`;
+  return key;
+}
 
 /**
  * Edits one widget (or creates one from a candidate when `isNew`).
@@ -33,6 +48,12 @@ export function WidgetEditor({ kind, obj, layoutEntry, isNew, onSave, onRemove, 
     return v !== undefined && v !== '' && Number.isFinite(Number(v)) ? String(Math.max(0, Math.min(2, Math.round(Number(v))))) : '';
   });
   const [statusText, setStatusText] = useState(m[STATUS_META.text] || '');
+  // states: value -> text (state_<x>/text_<x>, IoT Open's convention) + colour (dashboard.color_<x>)
+  const initialStates = stateMap(obj).map((st) => ({ key: st.key, value: st.value, text: st.text, color: m[stateColorKey(st.key)] || '' }));
+  const [states, setStates] = useState(initialStates);
+  const setState = (i, patch) => setStates((rows) => rows.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+  const [press, setPress] = useState(m[OBJ_META.press] || '');
+  const [release, setRelease] = useState(m[OBJ_META.release] || '');
   const initiallyVisible = !isHidden(obj);
   const [visible, setVisible] = useState(initiallyVisible);
   const [busy, setBusy] = useState(false);
@@ -44,7 +65,7 @@ export function WidgetEditor({ kind, obj, layoutEntry, isNew, onSave, onRemove, 
     if (isNew) {
       setW(d.w || 1);
       setH(d.h || 1);
-    }
+    } else if (Number(h) < 1 && !HALF_HEIGHT_TYPES.includes(t)) setH(1);
   };
 
   const save = async () => {
@@ -54,6 +75,19 @@ export function WidgetEditor({ kind, obj, layoutEntry, isNew, onSave, onRemove, 
       const params = { w: Number(w), h: Number(h) };
       if (type === 'gauge') Object.assign(params, { min: Number(min), max: Number(max) });
       if (type === 'chart') Object.assign(params, { hours: Number(hours), aggr });
+      // states: only for value/status; rows removed in the editor delete their three keys
+      let st = {};
+      if (kind === 'function' && (type === 'value' || type === 'status')) {
+        const rows = states.filter((r) => String(r.value).trim() !== '' || r.key);
+        if (rows.some((r) => String(r.value).trim() === '')) throw new Error('Varje tillstånd behöver ett värde.');
+        const vals = rows.map((r) => String(r.value).trim());
+        if (new Set(vals).size !== vals.length) throw new Error('Två tillstånd har samma värde.');
+        const keyed = [];
+        for (const r of rows) keyed.push(r.key ? r : { ...r, key: newStateKey(r, [...rows, ...keyed]) });
+        for (const r of initialStates) if (!keyed.some((k) => k.key === r.key)) Object.assign(st, { [`state_${r.key}`]: '', [`text_${r.key}`]: '', [stateColorKey(r.key)]: '' });
+        for (const r of keyed) Object.assign(st, { [`state_${r.key}`]: String(r.value).trim(), [`text_${r.key}`]: r.text.trim(), [stateColorKey(r.key)]: r.color.trim() });
+      }
+      const btn = kind === 'function' && type === 'button' ? { press: press.trim(), release: release.trim() } : {};
       // IoT Open's own "visible" flag: always written as "true"/"false" (never deleted), and only when changed
       const vis = kind === 'function' && visible !== initiallyVisible ? { visible: visible ? 'true' : 'false' } : {};
       if (limitsCheck.error) throw new Error(`Gränsvärden: ${limitsCheck.error}`);
@@ -61,7 +95,7 @@ export function WidgetEditor({ kind, obj, layoutEntry, isNew, onSave, onRemove, 
         kind === 'function'
           ? { [STATUS_META.limits]: limits.trim(), [STATUS_META.status]: status, [STATUS_META.text]: status ? statusText.trim() : '' }
           : {};
-      await onSave({ widget: type, nickname: nickname.trim(), color: color.trim(), icon, ...vis, ...lim }, params);
+      await onSave({ widget: type, nickname: nickname.trim(), color: color.trim(), icon, ...vis, ...lim, ...st, ...btn }, params);
     } catch (e) {
       setError(errText(e));
       setBusy(false);
@@ -187,12 +221,46 @@ export function WidgetEditor({ kind, obj, layoutEntry, isNew, onSave, onRemove, 
         </Field>
         <Field label="Höjd (rader)">
           <select value={h} onChange={(e) => setH(e.target.value)}>
-            {[1, 2, 3, 4].map((n) => (
-              <option key={n}>{n}</option>
+            {heightOptions(type).map(([n, l]) => (
+              <option key={n} value={n}>
+                {l}
+              </option>
             ))}
           </select>
         </Field>
       </div>
+      {kind === 'function' && (type === 'value' || type === 'status') && (
+        <Field
+          label="Tillstånd: text och färg"
+          help={`Visar en text och färg beroende på värdet, t.ex. 1 = Larmat (röd) och 0 = Avlarmat (grön). Sparas som state_<namn>, text_<namn> och dashboard.color_<namn>.${type === 'value' ? ' Färgen fyller hela widgeten - med höjd 0,5 blir den en banner.' : ' Färgen används på pricken.'}`}
+        >
+          <div className="state-rows">
+            {states.map((r, i) => (
+              <div key={r.key || `new${i}`} className="state-row">
+                <input value={r.value} onChange={(e) => setState(i, { value: e.target.value })} placeholder="Värde" aria-label="Värde" title={r.key ? `state_${r.key}` : 'Nytt tillstånd'} />
+                <input value={r.text} onChange={(e) => setState(i, { text: e.target.value })} placeholder="Text" aria-label="Text" />
+                <SeriesColor value={r.color} fallback="#0d3e53" onChange={(c) => setState(i, { color: c })} label={r.text || r.value || 'tillståndet'} />
+                <button type="button" className="link-btn small" onClick={() => setStates((rows) => rows.filter((_, j) => j !== i))} aria-label="Ta bort tillståndet">
+                  Ta bort
+                </button>
+              </div>
+            ))}
+            <button type="button" className="btn small-btn" onClick={() => setStates((rows) => [...rows, { key: '', value: '', text: '', color: '' }])}>
+              <Icon name="plus" size={14} /> Lägg till tillstånd
+            </button>
+          </div>
+        </Field>
+      )}
+      {type === 'button' && (
+        <div className="row gap">
+          <Field label="Värde vid tryck (dashboard.press)" help="Skickas till topic_write när knappen trycks ned. Tomt = 1.">
+            <input value={press} onChange={(e) => setPress(e.target.value)} placeholder="1" />
+          </Field>
+          <Field label="Värde vid släpp (dashboard.release)" help="Valfritt. Skickas när knappen släpps. Tomt = inget skickas.">
+            <input value={release} onChange={(e) => setRelease(e.target.value)} placeholder="t.ex. 0" />
+          </Field>
+        </div>
+      )}
       {type === 'gauge' && (
         <div className="row gap">
           <Field label="Min">
@@ -226,7 +294,7 @@ export function WidgetEditor({ kind, obj, layoutEntry, isNew, onSave, onRemove, 
           </select>
         </Field>
       )}
-      {(type === 'switch' || type === 'number') && !writeTopic(obj) && <div className="warn-box">Funktionen saknar topic_write, så den kan inte styras härifrån.</div>}
+      {(type === 'switch' || type === 'number' || type === 'button') && !writeTopic(obj) && <div className="warn-box">Funktionen saknar topic_write, så den kan inte styras härifrån.</div>}
       {error && <div className="error-box">{error}</div>}
     </Modal>
   );
