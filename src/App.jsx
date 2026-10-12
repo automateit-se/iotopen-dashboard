@@ -39,6 +39,9 @@ function Shell() {
           {brandLogo ? <img className="custom-logo" src={brandLogo} alt="Logotyp" /> : <img src="branding/iotopen-logo-white.svg" alt="IoT Open" />}
           <span className="app-title">{config.appTitle}</span>
         </a>
+        <span className="app-version" title="Dashboardens version">
+          v{__APP_VERSION__}
+        </span>
         <span className="grow" />
         <span className="muted small user">{user.email}</span>
         <button type="button" className="icon-btn" onClick={() => signOut()} title="Logga ut" aria-label="Logga ut">

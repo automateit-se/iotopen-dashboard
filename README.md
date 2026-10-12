@@ -57,6 +57,8 @@ The mock (`mock/server.mjs`, no dependencies) implements the parts of the IoT Op
 - the tag `v1.2.3` gives `:1.2.3`, `:1.2` and `:latest`
 - pull requests are built but not published
 
+The version shown next to the title in the header is the tag for tagged builds (build argument `APP_VERSION`), otherwise `version` in `package.json`.
+
 ```bash
 docker run -d -p 8080:8080 -e LYNX_URL=https://lynx.iotopen.se ghcr.io/<owner>/<repo>:latest
 ```
@@ -139,22 +141,29 @@ A function or device appears on the dashboard when it has `dashboard.widget`. Ev
 
 | Key                  | Values                                                                                                                                                                                                                                          |
 |----------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `dashboard.widget`   | Function: `value`, `chart`, `gauge`, `switch`, `status`, `number`. Device: `card`. Empty = not shown                                                                                                                                            |
+| `dashboard.widget`   | Function: `value`, `chart`, `gauge`, `switch`, `status`, `number`, `button`. Device: `card`. Empty = not shown                                                                                                                                  |
 | `dashboard.nickname` | Display name. Empty = `meta.name`                                                                                                                                                                                                               |
 | `dashboard.color`    | Any CSS colour, e.g. `#0f766e`                                                                                                                                                                                                                  |
-| `dashboard.icon`     | Icon name: `bolt`, `thermometer`, `droplet`, `power`, `lightbulb`, `gauge`, `door`, `lift`, `wind`, `home`, `chart`, `alert`, `sun`, `fan`, `lock`, `signal`, `battery`, `device`. Empty = IoT Open's standard `icon` key if it is one of these |
+| `dashboard.icon`     | Icon name: `bolt`, `thermometer`, `droplet`, `power`, `lightbulb`, `gauge`, `door`, `lift`, `wind`, `home`, `chart`, `alert`, `sun`, `fan`, `lock`, `signal`, `battery`, `device`, `bell`, `link`. Empty = IoT Open's standard `icon` key if it is one of these |
 | `dashboard.timeline` | Name of a timeline. All functions with the same name become rows in one timeline widget                                                                                                                                                         |
 | `dashboard.chart`    | Name of a multi-series graph. All functions with the same name are drawn as lines in one graph                                                                                                                                                  |
 | `dashboard.limits`   | Limits for status OK / Warning / Critical, e.g. `-w<18,>21 -c<16,>22` (see below)                                                                                                                                                               |
+| `dashboard.color_<x>` | Colour for the state `state_<x>`, e.g. `dashboard.color_armed = #dc2626`. Fills a *value* widget, colours the dot of a *status* widget                                                                                                         |
+| `dashboard.press`    | *button*: value sent to `topic_write` while the button is pressed. Empty = `1`                                                                                                                                                                  |
+| `dashboard.release`  | *button*: value sent when the button is released. Empty = nothing is sent                                                                                                                                                                       |
 
 The dashboard also reads IoT Open's standard function metadata ([meta keys](https://lynx.iotopen.se/tech/docs/platform/devxfuncx/meta-keys.html)): `name`, `format`, `unit`, `icon`, `visible`, `topic_read`, `topic_write`, `topic_read_onoff`, `topic_write_onoff`, `min`, `max`, and the `state_<x>` / `text_<x>` pairs (`on`/`off`, `open`/`closed`, `true`/`false`, `movement`/`nomovement` …).
+
+*Add widget* (*Lägg till widget*) lists what is not on the dashboard yet, grouped per device: click a device to open it and pick one of its functions, or the whole device as a card. Search shows only the devices with a matching function (or a matching name). The miniatures of the widget types narrow the list to what fits, e.g. *Brytare* shows only functions with `topic_write` and on/off states.
 
 **IoT Open is the master.** An object with `visible = "0"` or `"false"` is hidden everywhere in the dashboard: widgets, card rows, timelines, graphs and the *Add widget* lists. In edit mode hidden widgets stay visible, dimmed and marked *Hidden* (*Dold*). A missing `visible` means visible.
 
 ### Widget types
 
-- **value**: the latest value, formatted with the function's `format` and `unit`. Discrete values use the `state_<x>`/`text_<x>` pairs, e.g. `state_closed = 0`, `text_closed = Closed`.
-- **status**: like *value*, plus a dot showing the state (coloured when active – on, open, movement – grey otherwise). Best for doors, alarms and motion.
+- **value**: the latest value, formatted with the function's `format` and `unit`. Discrete values use the `state_<x>`/`text_<x>` pairs, e.g. `state_closed = 0`, `text_closed = Closed`. With `dashboard.color_<x>` the whole tile is filled with the colour of the current state, and with height 0.5 it becomes a **banner**, e.g. across the top of the dashboard: `state_armed = 2`, `text_armed = Larmat`, `dashboard.color_armed = #dc2626`. The widget editor has a table for these states (value, text, colour).
+- **status**: like *value*, plus a dot showing the state (coloured when active – on, open, movement – grey otherwise, or the state's `dashboard.color_<x>`). Best for doors, alarms and motion.
+- **button** (*Tryckknapp*): a momentary push button, e.g. a door bell. Sends `dashboard.press` (default 1) to `topic_write` when pressed and, if set, `dashboard.release` when released. Works with mouse, touch and keyboard.
+- **Link button (www)**: a button that opens another web page (http/https only). Created with *Add widget → New link button* (*Ny länkknapp (www)*). It has no device or function behind it, so it is stored only in the layout file under `u:<n>` (`url`, `label`, `newTab`, `icon`, `color`).
 - **switch**: a toggle that publishes the "on"/"off" state value (`state_on`/`state_off`, or the matching pair, default 1/0) to `topic_write`, or `topic_write_onoff` when present.
 - **number**: publishes a number to `topic_write`. With `min`/`max` it becomes a slider (e.g. a dimmer 0–100); with `topic_write_onoff` an on/off toggle is added.
 - **gauge**: a half circle between `min` and `max` (from the layout file).
@@ -218,12 +227,14 @@ Timelines always read raw data, since averaging on/off states would hide events.
     "f:120": { "order": 2, "w": 1, "h": 1 },
     "d:101": { "order": 3, "w": 4, "h": 2 },
     "t:Events": { "order": 4, "w": 8, "h": 2, "hours": 24, "min_width": 1, "series": { "120": "#dc2626" } },
-    "c:Temperatures": { "order": 5, "w": 8, "h": 3, "hours": 168, "aggr": "avg" }
+    "c:Temperatures": { "order": 5, "w": 8, "h": 3, "hours": 168, "aggr": "avg" },
+    "f:125": { "order": 6, "w": 8, "h": 0.5 },
+    "u:1": { "order": 7, "w": 2, "h": 1, "url": "https://www.example.com/", "label": "Weather", "newTab": true }
   }
 }
 ```
 
-Keys are `f:<function id>`, `d:<device id>`, `t:<timeline name>` or `c:<graph name>`. `w` is the width in columns of 8 (1–8) and `h` the height in rows. The grid has 8 columns on wide screens, 6 and 4 on smaller ones and 2 on phones, so `w = 1` puts two small widgets side by side on a phone. Files with `"version": 1` (4 columns) are converted automatically (widths doubled) and saved as version 2 the next time the layout changes.
+Keys are `f:<function id>`, `d:<device id>`, `t:<timeline name>`, `c:<graph name>` or `u:<n>` (link button). `w` is the width in columns of 8 (1–8) and `h` the height in rows; `h = 0.5` (half a row) works for value, status, switch, button and link widgets. The grid has 8 columns on wide screens, 6 and 4 on smaller ones and 2 on phones, so `w = 1` puts two small widgets side by side on a phone. Files with `"version": 1` (4 columns) are converted automatically (widths doubled) and saved as version 2 the next time the layout changes.
 
 | Parameter    | Applies to                   | Meaning                                                                   |
 |--------------|------------------------------|---------------------------------------------------------------------------|
@@ -233,6 +244,7 @@ Keys are `f:<function id>`, `d:<device id>`, `t:<timeline name>` or `c:<graph na
 | `min`, `max` | gauge                        | Scale limits                                                              |
 | `color`      | timeline, multi-series graph | Colour for the whole widget                                               |
 | `series`     | timeline, multi-series graph | Own colour per row/line: `{ "<function id>": "<colour>" }`                |
+| `url`, `label`, `newTab`, `icon` | link button | Address (http/https), button text (empty = the domain), open in a new tab, icon |
 
 Without the file, default sizes are used and widgets are sorted by name.
 
@@ -248,6 +260,9 @@ The dashboard only writes when an admin changes something in edit mode:
 | Visible checkbox              | `visible` = `"true"`/`"false"` on the function (never deleted)                               | Set the value back in Lynx or in the widget editor                              |
 | Limits                        | `dashboard.limits` on the function                                                           | Empty the field, or remove the key in Lynx                                      |
 | Status                        | `dashboard.status` (0/1/2) + `dashboard.status_text` on the function                         | Choose *Ingen* in the widget editor, or remove the keys in Lynx                 |
+| States (text and colour)      | `state_<x>`, `text_<x>` and `dashboard.color_<x>` on the function                            | *Ta bort* on the row in the widget editor, or remove the keys in Lynx           |
+| Push button values            | `dashboard.press` / `dashboard.release` on the function                                      | Empty the fields, or remove the keys in Lynx                                    |
+| Link button (www)             | Only `dashboard-layout.json` (`u:<n>`)                                                       | *Ta bort länkknappen*                                                           |
 | Logo                          | File `dashboard-logo.png` on the installation                                                | *Återställ till IoT Open* in Settings, or delete the file under *Files*         |
 | Move or resize a widget       | Only `dashboard-layout.json`                                                                 | Delete the file under the installation's *Files* for the default layout         |
 | Settings                      | `PUT …/installation/{iid}/meta/dashboard.*` (title, admins, colours)                         | Remove the keys in Lynx, or empty the fields                                    |
@@ -257,7 +272,7 @@ IoT Open rejects empty metadata values, so an empty field in the dashboard alway
 The keys the dashboard writes are:
 
 - on the installation: `dashboard.title`, `dashboard.admins` and `dashboard.color_*` (see the table above)
-- on functions and devices: `dashboard.widget`, `dashboard.nickname`, `dashboard.color`, `dashboard.icon`, `dashboard.timeline`, `dashboard.chart`, `dashboard.limits`, `dashboard.status`, `dashboard.status_text`, and `visible`
+- on functions and devices: `dashboard.widget`, `dashboard.nickname`, `dashboard.color`, `dashboard.icon`, `dashboard.timeline`, `dashboard.chart`, `dashboard.limits`, `dashboard.status`, `dashboard.status_text`, `dashboard.color_<x>`, `dashboard.press`, `dashboard.release`, and `visible` (plus `state_<x>`/`text_<x>` when states are edited)
 
 Other `dashboard.*` keys may come from older dashboards (e.g. `dashboard.in_graph`, `dashboard.menu_group`). They are not read and must not be removed when undoing changes made here.
 

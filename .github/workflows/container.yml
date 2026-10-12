@@ -53,5 +53,8 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # the version shown in the header: the tag for releases, package.json otherwise
+          build-args: |
+            APP_VERSION=${{ startsWith(github.ref, 'refs/tags/v') && steps.meta.outputs.version || '' }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

@@ -7,10 +7,12 @@
 //   meta                dashboard.nickname   display name (default: meta.name)
 //                       dashboard.color      any CSS colour
 //                       dashboard.icon       icon name, see components/icons.jsx
+//                       dashboard.color_<x>  colour for the state state_<x> (value/status widgets, e.g. a banner)
+//                       dashboard.press / dashboard.release  values a push button sends (release optional)
 //   Installation file   dashboard-layout.json  order, size and technical parameters per widget
 //                       dashboard-logo.png     logo in the header instead of IoT Open's (no file = default)
 //
-// Widget keys are "f:<function id>" and "d:<device id>".
+// Widget keys are "f:<function id>" and "d:<device id>"; link buttons (www) live only in the layout file as "u:<id>".
 
 import { lynx } from '../api/lynx.js';
 import { stateMap, stateFor } from './format.js';
@@ -22,7 +24,7 @@ export const safeColor = (v) => {
 };
 
 // icon names the dashboard can draw (components/icons.jsx); IoT Open's meta "icon" is used when it matches
-const ICON_SET = new Set(['bolt', 'thermometer', 'droplet', 'power', 'lightbulb', 'gauge', 'door', 'lift', 'wind', 'home', 'chart', 'alert', 'sun', 'fan', 'lock', 'signal', 'battery', 'device']);
+const ICON_SET = new Set(['bolt', 'thermometer', 'droplet', 'power', 'lightbulb', 'gauge', 'door', 'lift', 'wind', 'home', 'chart', 'alert', 'sun', 'fan', 'lock', 'signal', 'battery', 'device', 'bell', 'link']);
 
 export const INST_META = {
   title: 'dashboard.title',
@@ -37,7 +39,19 @@ export const OBJ_META = {
   // group widgets: functions with the same name form one widget
   timeline: 'dashboard.timeline', // discrete functions as state bars
   chart: 'dashboard.chart', // analog functions as lines in one graph
+  // push button: value sent while pressed, and (optional) when released
+  press: 'dashboard.press',
+  release: 'dashboard.release',
 };
+
+/** Meta key for the colour of state_<x>. */
+export const stateColorKey = (key) => `dashboard.color_${key}`;
+
+/** Colour for the function's current value (dashboard.color_<x> of the matching state_<x>), or ''. */
+export function stateColor(fn, value) {
+  const st = stateFor(fn, value);
+  return st ? safeColor(fn.meta?.[stateColorKey(st.key)]) : '';
+}
 
 /**
  * Group widgets. Membership = meta on each function, size/hours/colour in the layout file under "<prefix>:<name>".
@@ -107,9 +121,27 @@ export const FUNCTION_WIDGETS = [
   { id: 'switch', label: 'Brytare', help: 'Skickar state_on/state_off till topic_write (eller topic_write_onoff) via MQTT.' },
   { id: 'status', label: 'Status', help: 'Av/på-indikator med text_on/text_off.' },
   { id: 'number', label: 'Börvärde / nivå', help: 'Skickar ett tal till topic_write via MQTT. Med min/max i meta blir det ett reglage (t.ex. dimmer).' },
+  { id: 'button', label: 'Tryckknapp', help: 'Fjädrande knapp, t.ex. dörrklocka: skickar ett värde när den trycks ned och (valfritt) ett när den släpps.' },
 ];
 export const DEVICE_WIDGETS = [{ id: 'card', label: 'Enhetskort', help: 'Alla funktioner som hör till enheten i ett kort.' }];
-export const WIDGET_LABEL = { ...Object.fromEntries([...FUNCTION_WIDGETS, ...DEVICE_WIDGETS].map((w) => [w.id, w.label])), timeline: 'Tidslinje', multichart: 'Graf (flera)' };
+export const WIDGET_LABEL = { ...Object.fromEntries([...FUNCTION_WIDGETS, ...DEVICE_WIDGETS].map((w) => [w.id, w.label])), timeline: 'Tidslinje', multichart: 'Graf (flera)', www: 'Länkknapp (www)' };
+
+/** Widget types that can be half a row high, e.g. a banner across the top of the dashboard. */
+export const HALF_HEIGHT_TYPES = ['value', 'status', 'switch', 'button', 'www'];
+export const heightOptions = (type) => [...(HALF_HEIGHT_TYPES.includes(type) ? [[0.5, '0,5 (banner)']] : []), [1, '1'], [2, '2'], [3, '3'], [4, '4']];
+
+/**
+ * Which functions/devices fit a widget type – used by the miniatures in "Lägg till widget" to narrow the list.
+ * Value, graph, gauge and status take any function.
+ */
+export function fitsType(type, kind, obj) {
+  if (type === 'card') return kind === 'device';
+  if (kind !== 'function') return false;
+  if (type === 'switch') return !!writeTopic(obj) && isBinary(obj);
+  if (type === 'number' || type === 'button') return !!writeTopic(obj);
+  if (type === 'status') return isDiscrete(obj);
+  return true;
+}
 
 /** Default size and parameters per widget type (columns × rows in the grid). */
 // Grid: 8 columns on wide screens, 6 / 4 / 2 on smaller ones (layout version 2). w is in those columns,
@@ -121,6 +153,8 @@ export const DEFAULT_LAYOUT = {
   status: { w: 2, h: 1 },
   switch: { w: 2, h: 1 },
   number: { w: 2, h: 1 },
+  button: { w: 2, h: 1 },
+  www: { w: 2, h: 1 },
   gauge: { w: 2, h: 2, min: 0, max: 100 },
   chart: { w: 4, h: 2, hours: 24 },
   card: { w: 4, h: 2 },
@@ -231,13 +265,55 @@ export function buildWidgets(raw, layout) {
       });
     }
   }
+  // link buttons (www): only in the layout file, no IoT Open object behind them
+  for (const [key, l] of Object.entries(layout.widgets || {})) {
+    if (!key.startsWith(`${LINK_PREFIX}:`)) continue;
+    out.push({
+      key,
+      kind: 'link',
+      type: 'www',
+      name: String(l.label || '').trim() || hostOf(l.url) || 'Länk',
+      color: safeColor(l.color),
+      icon: ICON_SET.has(l.icon) ? l.icon : 'link',
+      layout: { ...DEFAULT_LAYOUT.www, ...l },
+      hidden: false,
+    });
+  }
   // explicit order from the layout file first, then the rest by name
   return out.sort((a, b) => (a.layout.order ?? 1e9) - (b.layout.order ?? 1e9) || a.name.localeCompare(b.name, 'sv'));
 }
 
+// ---- link buttons (www) ---------------------------------------------------------------------------
+export const LINK_PREFIX = 'u';
+
+/** The URL when it is a plain http(s) address, else '' – nothing else (javascript: etc.) is ever opened. */
+export function safeUrl(v) {
+  const s = String(v ?? '').trim();
+  if (!s) return '';
+  try {
+    const u = new URL(/^[a-z][a-z0-9+.-]*:/i.test(s) ? s : `https://${s}`);
+    return u.protocol === 'http:' || u.protocol === 'https:' ? u.href : '';
+  } catch {
+    return '';
+  }
+}
+
+const hostOf = (v) => {
+  const u = safeUrl(v);
+  return u ? new URL(u).host : '';
+};
+
+/** A new, unused key for a link button. */
+export const newLinkKey = (layout) => {
+  let n = 1;
+  while (layout.widgets?.[`${LINK_PREFIX}:${n}`]) n++;
+  return `${LINK_PREFIX}:${n}`;
+};
+
 /** The functions a widget shows (for status): its own function, a device's functions, or a group's members. */
 export function widgetFunctions(w, raw) {
   if (w.functions) return w.functions;
+  if (w.kind === 'link') return [];
   if (w.kind === 'device') return (raw?.functions || []).filter((f) => String(f.meta?.device_id) === String(w.obj.id) && !isHidden(f));
   return w.obj ? [w.obj] : [];
 }
@@ -401,7 +477,7 @@ export function applyTheme(inst) {
 }
 
 /** True for colours where dark text reads better than white (relative luminance above ~0.45). */
-function isLight(color) {
+export function isLight(color) {
   const ctx = document.createElement('canvas').getContext('2d');
   ctx.fillStyle = color;
   ctx.fillRect(0, 0, 1, 1);

@@ -4,7 +4,9 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
 COPY . .
-RUN npm run build
+# shown in the header; CI passes the release tag (empty = the version in package.json)
+ARG APP_VERSION=""
+RUN APP_VERSION="$APP_VERSION" npm run build
 
 # ---- runtime: static files + reverse proxy to IoT Open, non-root on :8080 ----
 FROM nginxinc/nginx-unprivileged:1.27-alpine
