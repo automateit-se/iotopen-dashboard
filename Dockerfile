@@ -14,7 +14,8 @@ ENV LYNX_URL=https://lynx.iotopen.se \
     APP_TITLE="Dashboard" \
     BASE_PATH="" \
     LIVE_UPDATES=true \
-    CUSTOM_SERVERS=true
+    CUSTOM_SERVERS=true \
+    API_MODE=proxy
 COPY nginx/default.conf.template /etc/nginx/templates/default.conf.template
 COPY nginx/snippets/ /etc/nginx/snippets/
 # runs before the template is rendered; the container refuses to start on a suspicious LYNX_URL

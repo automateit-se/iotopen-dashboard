@@ -1,8 +1,11 @@
 import { appUrl, config } from './config.js';
 
 // Which IoT Open server the dashboard talks to.
-//   - Default: the server the container is configured for (LYNX_URL). Requests go to this origin
-//     (/api, /mqtt) and nginx relays them, so the browser never talks cross-origin.
+//   - Default: the server the container is configured for (LYNX_URL).
+//       API_MODE=proxy (default): requests go to this origin (/api, /mqtt) and nginx relays them, so the
+//       browser never talks cross-origin.
+//       API_MODE=direct: the browser talks to LYNX_URL itself, so TLS runs end to end between the browser
+//       and IoT Open and tokens never pass through this container or a TLS-terminating proxy in front of it.
 //   - Custom: a server the user typed on the sign-in page. It is saved in this browser only
 //     (localStorage) and the browser talks to it directly; IoT Open allows CORS for all origins.
 //     Can be turned off with CUSTOM_SERVERS=false in the container.
@@ -13,6 +16,9 @@ const LOCAL_HOSTS = ['localhost', '127.0.0.1', '[::1]'];
 export class ServerError extends Error {}
 
 export const customServersAllowed = () => !(config.customServers === false || config.customServers === 'false');
+
+/** API_MODE=direct: the default server is called directly from the browser instead of through this container. */
+export const directMode = () => config.apiMode === 'direct';
 
 /**
  * "lynx.example.com", "https://lynx.example.com/" -> "https://lynx.example.com".
@@ -82,12 +88,16 @@ export function saveServer() {
   }
 }
 
+/** Origin the browser sends API and MQTT traffic to, or null for this container's own origin (proxy). */
+const target = () => cur() || (directMode() ? defaultServer() : null);
+
 /** URL of an IoT Open API path, e.g. apiUrl('/api/v2/user/me'). */
-export const apiUrl = (path) => (cur() ? `${cur()}/${String(path).replace(/^\//, '')}` : appUrl(path));
+export const apiUrl = (path) => (target() ? `${target()}/${String(path).replace(/^\//, '')}` : appUrl(path));
 
 /** WebSocket URL of the MQTT broker. */
 export function mqttUrl() {
-  if (cur()) return `${cur().replace(/^http/, 'ws')}/mqtt`;
+  const t = target();
+  if (t) return `${t.replace(/^http/, 'ws')}/mqtt`;
   const { protocol, host } = window.location;
   return `${protocol === 'https:' ? 'wss' : 'ws'}://${host}${appUrl('mqtt')}`;
 }

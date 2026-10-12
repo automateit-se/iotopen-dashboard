@@ -9,6 +9,7 @@ services:
       ALLOWED_LYNX_HOSTS: lynx.iotopen.se  # comma separated allow-list for LYNX_URL
       APP_TITLE: Dashboard
       # CUSTOM_SERVERS: "false"        # hide the server choice on the sign-in page (only LYNX_URL)
+      # API_MODE: direct               # browser talks to LYNX_URL itself; this container only serves the app
       # BASE_PATH: /dashboard          # only if a proxy in front forwards the path prefix unchanged
     restart: unless-stopped
 
