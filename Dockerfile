@@ -1,5 +1,7 @@
 # ---- build ----
-FROM node:22-alpine AS build
+# the output is static files, so it is built once on the runner's own platform - npm under QEMU emulation
+# (the arm64 image) is slow and can hang
+FROM --platform=$BUILDPLATFORM node:22-alpine AS build
 WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
