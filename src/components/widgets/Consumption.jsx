@@ -21,7 +21,7 @@ export const VIEWS = [
   ['day', 7, '7 d'],
   ['day', 30, '30 d'],
   ['week', 12, '12 v'],
-  ['week', 52, '52 v'],
+  ['week', 52, '1 år'],
   ['month', 12, '12 mån'],
 ];
 const DAY = 86400;
