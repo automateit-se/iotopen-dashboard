@@ -326,6 +326,7 @@ li.stale .val, .tl-label.stale .tl-now { opacity: 0.45; }
 .map-ctl button { min-width: 28px; height: 28px; padding: 0 8px; font: inherit; font-size: 16px; line-height: 1; color: #1f2937; background: rgba(255, 255, 255, 0.92); border: 1px solid rgba(0, 0, 0, 0.18); border-radius: 6px; cursor: pointer; }
 .map-ctl .map-fit { font-size: 12px; }
 .map-attr { position: absolute; right: 0; bottom: 0; padding: 0 4px; font-size: 10px; color: #333; background: rgba(255, 255, 255, 0.75); border-top-left-radius: 4px; pointer-events: none; }
+.tracker-top { display: flex; justify-content: flex-end; }
 .tracker-legend { display: flex; flex-wrap: wrap; gap: 2px 12px; align-items: center; }
 .tracker-last { text-align: right; }
 
