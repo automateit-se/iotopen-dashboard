@@ -29,6 +29,12 @@ map "${CUSTOM_SERVERS}:${API_MODE}" $dash_connect_src {
     "false:direct"  "'self' ${LYNX_URL} $dash_lynx_ws";
 }
 
+# img-src of the CSP: the origin of MAP_TILES (map background of the Tracker widget), nothing when it is empty
+map "${MAP_TILES}" $dash_tile_origin {
+    default                          "";
+    "~^(?<tileorigin>https://[^/]+)/"  $tileorigin;
+}
+
 map $http_upgrade $dash_is_websocket {
     default        0;
     ~*^websocket$  1;
@@ -55,7 +61,7 @@ server {
         include /etc/nginx/snippets/security-headers.conf;
         default_type application/json;
         add_header Cache-Control "no-store";
-        return 200 '{"appTitle":"${APP_TITLE}","liveUpdates":"${LIVE_UPDATES}","lynxServer":"${LYNX_URL}","customServers":"${CUSTOM_SERVERS}","apiMode":"${API_MODE}"}';
+        return 200 '{"appTitle":"${APP_TITLE}","liveUpdates":"${LIVE_UPDATES}","lynxServer":"${LYNX_URL}","customServers":"${CUSTOM_SERVERS}","apiMode":"${API_MODE}","mapTiles":"${MAP_TILES}","mapAttribution":"${MAP_ATTRIBUTION}"}';
     }
 
     # Relay to IoT Open. The upstream is FIXED (${LYNX_URL}, validated at start) – nothing in a

@@ -1,5 +1,7 @@
 # ---- build ----
-FROM node:22-alpine AS build
+# the output is static files, so it is built once on the runner's own platform - npm under QEMU emulation
+# (the arm64 image) is slow and can hang
+FROM --platform=$BUILDPLATFORM node:22-alpine AS build
 WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
@@ -17,7 +19,9 @@ ENV LYNX_URL=https://lynx.iotopen.se \
     BASE_PATH="" \
     LIVE_UPDATES=true \
     CUSTOM_SERVERS=true \
-    API_MODE=proxy
+    API_MODE=proxy \
+    MAP_TILES="https://tile.openstreetmap.org/{z}/{x}/{y}.png" \
+    MAP_ATTRIBUTION="© OpenStreetMap-bidragsgivare"
 COPY nginx/default.conf.template /etc/nginx/templates/default.conf.template
 COPY nginx/snippets/ /etc/nginx/snippets/
 # runs before the template is rendered; the container refuses to start on a suspicious LYNX_URL

@@ -17,7 +17,7 @@ The dashboard is a static single-page app. It has no backend, no database and no
 | Brute force | `/api/v2/auth` is rate limited to 10 requests/minute per client IP (burst 5) |
 | Forwarding headers | Client-supplied `X-Forwarded-*`/`Forwarded` are not passed on |
 | Custom server | With `CUSTOM_SERVERS=true` (default) a user may type another IoT Open server at sign-in. Only `https://` origins without credentials, path or query are accepted (`http://` only for `localhost`). The address is saved in that browser only after a successful sign-in and cannot be preset through a link or URL parameter. The container's proxy is not involved, so this does not open the proxy for SSRF |
-| Browser headers | `Content-Security-Policy` (scripts and images only from the same origin; connections from the same origin, plus any `https:`/`wss:` origin when `CUSTOM_SERVERS=true`, or exactly `LYNX_URL` with `CUSTOM_SERVERS=false` and `API_MODE=direct`; no objects; no framing by other sites), `X-Content-Type-Options`, `Referrer-Policy`, `X-Frame-Options`, `Permissions-Policy`, `Cross-Origin-Opener-Policy` |
+| Browser headers | `Content-Security-Policy` (scripts and images only from the same origin, plus map tiles from the origin of `MAP_TILES`, which is validated at start: `https://` only; connections from the same origin, plus any `https:`/`wss:` origin when `CUSTOM_SERVERS=true`, or exactly `LYNX_URL` with `CUSTOM_SERVERS=false` and `API_MODE=direct`; no objects; no framing by other sites), `X-Content-Type-Options`, `Referrer-Policy`, `X-Frame-Options`, `Permissions-Policy`, `Cross-Origin-Opener-Policy` |
 | XSS | All text from IoT Open (names, texts, metadata) is rendered by React, which escapes it. The code uses no `innerHTML`/`dangerouslySetInnerHTML`/`eval` |
 | CSS from metadata | Colours from metadata and the layout file are only applied if the browser accepts them as a CSS colour (`CSS.supports('color', …)`) |
 | Container | `nginx-unprivileged` (non-root), port 8080, health check, multi-stage build (no sources or `node_modules` in the image) |
@@ -47,6 +47,8 @@ The dashboard is a static single-page app. It has no backend, no database and no
 - `/api/v2/…` is forwarded for all methods the dashboard might need; IoT Open enforces authorisation. The allow-list could be narrowed further to the exact endpoints in `src/api/lynx.js`.
 - There is no server-side session: if IoT Open accepts the token, the dashboard works. Session lifetime and 2FA policy are IoT Open's.
 - Status (`dashboard.status`) written by a server-side service would need its own service account with write access to function metadata only.
+
+- The *Tracker* map loads its tiles straight from `MAP_TILES` in the viewer's browser, so that tile server sees the viewer's IP address, the dashboard's origin (as `Referer`) and which map area is viewed. Positions themselves are never sent to it. Set `MAP_TILES` to your own tile server, or to empty, if that is not acceptable.
 
 ## Reporting
 

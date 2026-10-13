@@ -3,7 +3,8 @@
 //   Installation meta   dashboard.title      title shown above the dashboard (default: installation name)
 //                       dashboard.admins     comma separated user ids or e-mails that may edit
 //                                            (empty = anyone; IoT Open still rejects writes without permission)
-//   Function/device     dashboard.widget     widget type – the object is shown only when this is set
+//   Function/device     dashboard.widget     widget type – the object is shown only when this is set; several
+//                                            types comma separated (e.g. "switch,button") give one widget each
 //   meta                dashboard.nickname   display name (default: meta.name)
 //                       dashboard.color      any CSS colour
 //                       dashboard.icon       icon name, see components/icons.jsx
@@ -12,7 +13,8 @@
 //   Installation file   dashboard-layout.json  order, size and technical parameters per widget
 //                       dashboard-logo.png     logo in the header instead of IoT Open's (no file = default)
 //
-// Widget keys are "f:<function id>" and "d:<device id>"; link buttons (www) live only in the layout file as "u:<id>".
+// Widget keys are "f:<function id>" and "d:<device id>" for the first type in dashboard.widget and
+// "f:<id>:<type>" for the others; link buttons (www) live only in the layout file as "u:<id>".
 
 import { lynx } from '../api/lynx.js';
 import { stateMap, stateFor } from './format.js';
@@ -24,7 +26,7 @@ export const safeColor = (v) => {
 };
 
 // icon names the dashboard can draw (components/icons.jsx); IoT Open's meta "icon" is used when it matches
-const ICON_SET = new Set(['bolt', 'thermometer', 'droplet', 'power', 'lightbulb', 'gauge', 'door', 'lift', 'wind', 'home', 'chart', 'alert', 'sun', 'fan', 'lock', 'signal', 'battery', 'device', 'bell', 'link']);
+const ICON_SET = new Set(['bolt', 'thermometer', 'droplet', 'power', 'lightbulb', 'gauge', 'door', 'lift', 'wind', 'home', 'chart', 'alert', 'sun', 'fan', 'lock', 'signal', 'battery', 'device', 'bell', 'link', 'map']);
 
 export const INST_META = {
   title: 'dashboard.title',
@@ -39,6 +41,7 @@ export const OBJ_META = {
   // group widgets: functions with the same name form one widget
   timeline: 'dashboard.timeline', // discrete functions as state bars
   chart: 'dashboard.chart', // analog functions as lines in one graph
+  tracker: 'dashboard.tracker', // latitude/longitude or geohash functions as positions on a map
   // push button: value sent while pressed, and (optional) when released
   press: 'dashboard.press',
   release: 'dashboard.release',
@@ -59,6 +62,7 @@ export function stateColor(fn, value) {
 export const GROUPS = {
   timeline: { metaKey: 'dashboard.timeline', prefix: 't', type: 'timeline', icon: 'chart', label: 'tidslinje' },
   chart: { metaKey: 'dashboard.chart', prefix: 'c', type: 'multichart', icon: 'chart', label: 'graf' },
+  tracker: { metaKey: 'dashboard.tracker', prefix: 'k', type: 'tracker', icon: 'map', label: 'karta' },
 };
 
 // ---- discrete functions (timeline) --------------------------------------------------------------
@@ -121,10 +125,11 @@ export const FUNCTION_WIDGETS = [
   { id: 'switch', label: 'Brytare', help: 'Skickar state_on/state_off till topic_write (eller topic_write_onoff) via MQTT.' },
   { id: 'status', label: 'Status', help: 'Av/på-indikator med text_on/text_off.' },
   { id: 'number', label: 'Börvärde / nivå', help: 'Skickar ett tal till topic_write via MQTT. Med min/max i meta blir det ett reglage (t.ex. dimmer).' },
+  { id: 'consumption', label: 'Förbrukning', help: 'Staplar per timme, dygn, vecka eller månad från en mätarställning (el, vatten, besökare…). Använder sammanställd data från IoT Open.' },
   { id: 'button', label: 'Tryckknapp', help: 'Fjädrande knapp, t.ex. dörrklocka: skickar ett värde när den trycks ned och (valfritt) ett när den släpps.' },
 ];
 export const DEVICE_WIDGETS = [{ id: 'card', label: 'Enhetskort', help: 'Alla funktioner som hör till enheten i ett kort.' }];
-export const WIDGET_LABEL = { ...Object.fromEntries([...FUNCTION_WIDGETS, ...DEVICE_WIDGETS].map((w) => [w.id, w.label])), timeline: 'Tidslinje', multichart: 'Graf (flera)', www: 'Länkknapp (www)' };
+export const WIDGET_LABEL = { ...Object.fromEntries([...FUNCTION_WIDGETS, ...DEVICE_WIDGETS].map((w) => [w.id, w.label])), timeline: 'Tidslinje', multichart: 'Graf (flera)', tracker: 'Karta (Tracker)', www: 'Länkknapp (www)' };
 
 /** Widget types that can be half a row high, e.g. a banner across the top of the dashboard. */
 export const HALF_HEIGHT_TYPES = ['value', 'status', 'switch', 'button', 'www'];
@@ -140,6 +145,7 @@ export function fitsType(type, kind, obj) {
   if (type === 'switch') return !!writeTopic(obj) && isBinary(obj);
   if (type === 'number' || type === 'button') return !!writeTopic(obj);
   if (type === 'status') return isDiscrete(obj);
+  if (type === 'consumption') return !isDiscrete(obj);
   return true;
 }
 
@@ -160,6 +166,8 @@ export const DEFAULT_LAYOUT = {
   card: { w: 4, h: 2 },
   timeline: { w: 8, h: 2, hours: 24 },
   multichart: { w: 4, h: 2, hours: 24 },
+  tracker: { w: 4, h: 3, hours: 24, points: 200, pair: 5, fade: true },
+  consumption: { w: 4, h: 2, period: 'day', count: 7, mode: 'counter' },
 };
 
 /** Series colours for multi-line graphs: profile colours first, then distinct hues. */
@@ -176,6 +184,19 @@ export function unitOf(fn) {
 }
 
 export const keyOf = (kind, id) => `${kind === 'device' ? 'd' : 'f'}:${id}`;
+
+/** The widget types of a function or device: dashboard.widget split on commas ("switch,button"). */
+export const widgetTypes = (obj) => [
+  ...new Set(
+    String(obj?.meta?.[OBJ_META.widget] || '')
+      .split(',')
+      .map((t) => t.trim())
+      .filter((t) => t && t !== 'none'),
+  ),
+];
+
+/** Layout key of one widget: the first type keeps "f:<id>" (as before), the others get "f:<id>:<type>". */
+export const widgetKey = (kind, id, type, index) => (index === 0 ? keyOf(kind, id) : `${keyOf(kind, id)}:${type}`);
 
 // ---- control conventions in IoT Open function meta --------------------------------------------
 //   topic_write        "set/obj/…" – where values are published to control the function
@@ -220,22 +241,25 @@ export const devName = (d) => d.meta?.[OBJ_META.nickname] || d.meta?.name || d.t
 export function buildWidgets(raw, layout) {
   const out = [];
   const add = (kind, obj) => {
-    const type = obj.meta?.[OBJ_META.widget];
-    if (!type || type === 'none') return;
-    const key = keyOf(kind, obj.id);
-    const l = { ...(DEFAULT_LAYOUT[type] || { w: 1, h: 1 }), ...(layout.widgets?.[key] || {}) };
-    out.push({
-      key,
-      kind,
-      obj,
-      type,
-      name: kind === 'device' ? devName(obj) : fnName(obj),
-      color: safeColor(obj.meta?.[OBJ_META.color]),
-      // dashboard.icon, else IoT Open's standard meta "icon" when it is a name we can draw
-      icon: obj.meta?.[OBJ_META.icon] || (ICON_SET.has(obj.meta?.icon) ? obj.meta.icon : ''),
-      layout: l,
-      // IoT Open is master: visible = "false" hides the widget (still listed, dimmed, in edit mode)
-      hidden: isHidden(obj),
+    const types = widgetTypes(obj);
+    types.forEach((type, i) => {
+      const key = widgetKey(kind, obj.id, type, i);
+      const l = { ...(DEFAULT_LAYOUT[type] || { w: 1, h: 1 }), ...(layout.widgets?.[key] || {}) };
+      out.push({
+        key,
+        kind,
+        obj,
+        type,
+        types,
+        name: kind === 'device' ? devName(obj) : fnName(obj),
+        // an object with several widgets can give each its own colour in the layout file, else dashboard.color
+        color: safeColor(l.color) || safeColor(obj.meta?.[OBJ_META.color]),
+        // dashboard.icon, else IoT Open's standard meta "icon" when it is a name we can draw
+        icon: obj.meta?.[OBJ_META.icon] || (ICON_SET.has(obj.meta?.icon) ? obj.meta.icon : ''),
+        layout: l,
+        // IoT Open is master: visible = "false" hides the widget (still listed, dimmed, in edit mode)
+        hidden: isHidden(obj),
+      });
     });
   };
   raw.devices.forEach((d) => add('device', d));
@@ -322,12 +346,14 @@ export function widgetFunctions(w, raw) {
 // IoT Open documents visible = "0"/"1" (tech/docs/platform/devxfuncx/meta-keys); "false"/"true" is also in use.
 export const isHidden = (o) => ['0', 'false', 'no'].includes(String(o?.meta?.visible ?? '').trim().toLowerCase());
 
-/** Objects that could become widgets but are not shown yet. */
+/**
+ * Objects that can get a (another) widget, with the types they already have: every function (one function
+ * can have several widgets), and devices without a card.
+ */
 export function candidates(raw) {
-  const free = (o) => !o.meta?.[OBJ_META.widget] || o.meta[OBJ_META.widget] === 'none';
   return [
-    ...raw.devices.filter(free).map((o) => ({ kind: 'device', obj: o, name: devName(o) })),
-    ...raw.functions.filter(free).map((o) => ({ kind: 'function', obj: o, name: fnName(o) })),
+    ...raw.devices.filter((o) => !widgetTypes(o).length).map((o) => ({ kind: 'device', obj: o, name: devName(o), used: [] })),
+    ...raw.functions.map((o) => ({ kind: 'function', obj: o, name: fnName(o), used: widgetTypes(o) })),
   ];
 }
 

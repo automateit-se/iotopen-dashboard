@@ -4,9 +4,10 @@ import { Icon, ICON_NAMES } from './icons.jsx';
 import { RANGE_OPTIONS } from './widgets/RangePicker.jsx';
 import { AGGR_METHODS } from '../lib/history.js';
 import { STATUS_META, STATUS_TEXT, parseLimits } from '../lib/status.js';
-import { FUNCTION_WIDGETS, DEVICE_WIDGETS, DEFAULT_LAYOUT, OBJ_META, WIDTH_OPTIONS, HALF_HEIGHT_TYPES, heightOptions, writeTopic, isHidden, stateColorKey } from '../lib/dashboard.js';
+import { FUNCTION_WIDGETS, DEVICE_WIDGETS, DEFAULT_LAYOUT, OBJ_META, WIDTH_OPTIONS, HALF_HEIGHT_TYPES, heightOptions, writeTopic, isHidden, stateColorKey, widgetTypes, WIDGET_LABEL } from '../lib/dashboard.js';
 import { stateMap } from '../lib/format.js';
 import { ColorPicker, SeriesColor } from './ColorPicker.jsx';
+import { PERIODS, MODES } from './widgets/Consumption.jsx';
 
 /** state_<key> name for a new row: from the text (a-z, 0-9, _), else the value; unique among the rows. */
 function newStateKey(row, rows) {
@@ -26,12 +27,21 @@ function newStateKey(row, rows) {
  * Edits one widget (or creates one from a candidate when `isNew`).
  * Simple settings go to the object's metadata, size and technical parameters to the layout file.
  */
-export function WidgetEditor({ kind, obj, layoutEntry, isNew, onSave, onRemove, onClose }) {
+export function WidgetEditor({ kind, obj, widgetType, layoutEntry, isNew, onSave, onRemove, onClose }) {
   const m = obj.meta || {};
   const types = kind === 'device' ? DEVICE_WIDGETS : FUNCTION_WIDGETS;
-  const [type, setType] = useState(m[OBJ_META.widget] && m[OBJ_META.widget] !== 'none' ? m[OBJ_META.widget] : layoutEntry?.suggested || types[0].id);
+  // types the object's other widgets already have (one widget per type)
+  const taken = widgetTypes(obj).filter((t) => isNew || t !== widgetType);
+  const free = (t) => !taken.includes(t);
+  const [type, setType] = useState(() => {
+    if (!isNew && widgetType) return widgetType;
+    const s = layoutEntry?.suggested;
+    return s && free(s) ? s : (types.find((t) => free(t.id)) || types[0]).id;
+  });
+  // with several widgets on the object, the colour is stored per widget (layout file) instead of dashboard.color
+  const several = taken.length > 0;
   const [nickname, setNickname] = useState(m[OBJ_META.nickname] || '');
-  const [color, setColor] = useState(m[OBJ_META.color] || '');
+  const [color, setColor] = useState(several ? layoutEntry?.color || '' : m[OBJ_META.color] || '');
   const [icon, setIcon] = useState(m[OBJ_META.icon] || '');
   const base = { ...(DEFAULT_LAYOUT[type] || {}), ...(layoutEntry || {}) };
   const [w, setW] = useState(base.w || 1);
@@ -40,6 +50,9 @@ export function WidgetEditor({ kind, obj, layoutEntry, isNew, onSave, onRemove, 
   const [max, setMax] = useState(base.max ?? 100);
   const [hours, setHours] = useState(base.hours ?? 24);
   const [aggr, setAggr] = useState(base.aggr || 'avg');
+  const [period, setPeriod] = useState(base.period || 'day');
+  const [count, setCount] = useState(base.count ?? 7);
+  const [mode, setMode] = useState(base.mode || 'counter');
   const [limits, setLimits] = useState(m[STATUS_META.limits] || '');
   const limitsCheck = parseLimits(limits);
   // manual status: '' = none (key removed, limits decide), '0'/'1'/'2' = OK/Warning/Critical – can then be changed in IoT Open
@@ -72,9 +85,16 @@ export function WidgetEditor({ kind, obj, layoutEntry, isNew, onSave, onRemove, 
     setBusy(true);
     setError('');
     try {
-      const params = { w: Number(w), h: Number(h) };
+      if (!free(type)) throw new Error(`Funktionen har redan en widget av typen ${WIDGET_LABEL[type] || type}.`);
+      const params = { w: Number(w), h: Number(h), color: several ? color.trim() : '' };
       if (type === 'gauge') Object.assign(params, { min: Number(min), max: Number(max) });
       if (type === 'chart') Object.assign(params, { hours: Number(hours), aggr });
+      if (type === 'consumption') {
+        const most = PERIODS.find(([p]) => p === period)[2];
+        const n = Math.round(Number(count));
+        if (!(n >= 1 && n <= most)) throw new Error(`Antal staplar: 1-${most} för vald period.`);
+        Object.assign(params, { period, count: n, mode });
+      }
       // states: only for value/status; rows removed in the editor delete their three keys
       let st = {};
       if (kind === 'function' && (type === 'value' || type === 'status')) {
@@ -95,7 +115,7 @@ export function WidgetEditor({ kind, obj, layoutEntry, isNew, onSave, onRemove, 
         kind === 'function'
           ? { [STATUS_META.limits]: limits.trim(), [STATUS_META.status]: status, [STATUS_META.text]: status ? statusText.trim() : '' }
           : {};
-      await onSave({ widget: type, nickname: nickname.trim(), color: color.trim(), icon, ...vis, ...lim, ...st, ...btn }, params);
+      await onSave({ widget: type, nickname: nickname.trim(), ...(several ? {} : { color: color.trim() }), icon, ...vis, ...lim, ...st, ...btn }, params);
     } catch (e) {
       setError(errText(e));
       setBusy(false);
@@ -140,10 +160,15 @@ export function WidgetEditor({ kind, obj, layoutEntry, isNew, onSave, onRemove, 
         {objLabel} · {m.name || '–'}
         {m.topic_read ? ` · ${m.topic_read}` : ''}
       </p>
+      {taken.length > 0 && (
+        <p className="muted small">
+          Funktionen har {isNew ? 'redan' : 'också'} {taken.map((t) => WIDGET_LABEL[t] || t).join(', ')} på dashboarden. Namn, ikon, gränsvärden och tillstånd delas, storlek och färg är egna per widget.
+        </p>
+      )}
       <Field label="Typ">
         <div className="seg">
           {types.map((t) => (
-            <button key={t.id} type="button" className={type === t.id ? 'on' : ''} onClick={() => changeType(t.id)} title={t.help}>
+            <button key={t.id} type="button" className={type === t.id ? 'on' : ''} onClick={() => changeType(t.id)} title={free(t.id) ? t.help : 'Finns redan som widget för funktionen'} disabled={!free(t.id)}>
               {t.label}
             </button>
           ))}
@@ -198,7 +223,10 @@ export function WidgetEditor({ kind, obj, layoutEntry, isNew, onSave, onRemove, 
           <input value={statusText} onChange={(e) => setStatusText(e.target.value)} placeholder={STATUS_TEXT[Number(status)]} />
         </Field>
       )}
-      <Field label="Färg" help="Tomt = temats widgetfärg.">
+      <Field
+        label="Färg"
+        help={several ? `Gäller bara den här widgeten (funktionen har flera). Tomt = ${m[OBJ_META.color] ? `dashboard.color (${m[OBJ_META.color]})` : 'temats widgetfärg'}.` : 'Tomt = temats widgetfärg.'}
+      >
         <ColorPicker value={color} onChange={setColor} />
       </Field>
       <Field label="Ikon">
@@ -293,6 +321,33 @@ export function WidgetEditor({ kind, obj, layoutEntry, isNew, onSave, onRemove, 
             ))}
           </select>
         </Field>
+      )}
+      {type === 'consumption' && (
+        <>
+          <div className="row gap">
+            <Field label="En stapel per">
+              <select value={period} onChange={(e) => setPeriod(e.target.value)}>
+                {PERIODS.map(([v, l]) => (
+                  <option key={v} value={v}>
+                    {l}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Antal staplar" help="T.ex. 7 dygn, 30 dygn, 52 veckor eller 12 månader. Den sista är pågående period.">
+              <input type="number" min="1" max={PERIODS.find(([p]) => p === period)?.[2]} value={count} onChange={(e) => setCount(e.target.value)} />
+            </Field>
+          </div>
+          <Field label="Funktionen visar" help="Mätarställning: skillnaden mellan avläsningarna blir förbrukningen (ett nollställt räkneverk hanteras). IoT Open sammanställer per timme eller dygn, så även lång historik går snabbt.">
+            <select value={mode} onChange={(e) => setMode(e.target.value)}>
+              {MODES.map(([v, l]) => (
+                <option key={v} value={v}>
+                  {l}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </>
       )}
       {(type === 'switch' || type === 'number' || type === 'button') && !writeTopic(obj) && <div className="warn-box">Funktionen saknar topic_write, så den kan inte styras härifrån.</div>}
       {error && <div className="error-box">{error}</div>}

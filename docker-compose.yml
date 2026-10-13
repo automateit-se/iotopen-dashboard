@@ -11,6 +11,7 @@ services:
       # CUSTOM_SERVERS: "false"        # hide the server choice on the sign-in page (only LYNX_URL)
       # API_MODE: direct               # browser talks to LYNX_URL itself; this container only serves the app
       # BASE_PATH: /dashboard          # only if a proxy in front forwards the path prefix unchanged
+      # MAP_TILES: ""                  # map tiles for the Tracker widget (default OpenStreetMap, "" = no map background)
     restart: unless-stopped
 
   # Local demo without a real IoT Open instance:

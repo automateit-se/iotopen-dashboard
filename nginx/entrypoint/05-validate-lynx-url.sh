@@ -67,3 +67,20 @@ case "${CUSTOM_SERVERS:-true}" in
   true | false) echo "CUSTOM_SERVERS ok: ${CUSTOM_SERVERS:-true}" ;;
   *) echo "ERROR: CUSTOM_SERVERS='$CUSTOM_SERVERS' rejected: use true or false" >&2; exit 1 ;;
 esac
+
+# MAP_TILES: map background of the Tracker widget, "" = none. An https URL template with {z}, {x} and {y};
+# it ends up in the CSP (img-src) and in config.json, so only plain URL characters are accepted.
+tiles="${MAP_TILES:-}"
+if [ -n "$tiles" ]; then
+  echo "$tiles" | grep -Eq '^https://[A-Za-z0-9.-]+(:[0-9]{1,5})?/[A-Za-z0-9._~/{}=&?%-]*$' \
+    || { echo "ERROR: MAP_TILES='$tiles' rejected: use e.g. https://tile.openstreetmap.org/{z}/{x}/{y}.png (https only)" >&2; exit 1; }
+  for p in '{z}' '{x}' '{y}'; do
+    case "$tiles" in *"$p"*) ;; *) echo "ERROR: MAP_TILES='$tiles' rejected: $p is missing" >&2; exit 1 ;; esac
+  done
+fi
+echo "MAP_TILES ok: '${tiles}'"
+
+# MAP_ATTRIBUTION is shown on the map; it is written into config.json, so no quotes, backslashes or $.
+case "${MAP_ATTRIBUTION:-}" in
+  *\"* | *\'* | *\\* | *\$* | *\<* | *\>*) echo "ERROR: MAP_ATTRIBUTION rejected: no quotes, backslashes, \$, < or >" >&2; exit 1 ;;
+esac

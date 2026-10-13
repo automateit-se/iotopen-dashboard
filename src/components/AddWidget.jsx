@@ -6,10 +6,10 @@ import { candidates, isHidden, fitsType, devName as deviceName, WIDGET_LABEL } f
 import { formatValue } from '../lib/format.js';
 
 // the miniatures under the hint: what can be made from a function or device
-const THUMBS = ['value', 'chart', 'gauge', 'switch', 'status', 'number', 'button', 'card'];
+const THUMBS = ['value', 'chart', 'gauge', 'switch', 'status', 'number', 'button', 'consumption', 'card'];
 
 /**
- * Lists what is not on the dashboard yet, grouped per device: click a device to open it and pick one of its
+ * Lists functions and devices, grouped per device; a function that already has widgets can get another type: click a device to open it and pick one of its
  * functions (or the whole device as a card). Search and the miniatures narrow the list.
  */
 export function AddWidget({ raw, valueOf, onPick, onNewGroup, onNewLink, onClose }) {
@@ -19,7 +19,8 @@ export function AddWidget({ raw, valueOf, onPick, onNewGroup, onNewLink, onClose
   const [showHidden, setShowHidden] = useState(false);
   const all = useMemo(() => candidates(raw), [raw]);
   const hiddenCount = all.filter((c) => isHidden(c.obj)).length;
-  const list = (showHidden ? all : all.filter((c) => !isHidden(c.obj))).filter((c) => !type || fitsType(type, c.kind, c.obj));
+  // with a type chosen: what fits it and does not already have a widget of that type
+  const list = (showHidden ? all : all.filter((c) => !isHidden(c.obj))).filter((c) => !type || (fitsType(type, c.kind, c.obj) && !c.used.includes(type)));
   const needle = q.trim().toLowerCase();
   const hit = (...s) => !needle || s.some((x) => String(x || '').toLowerCase().includes(needle));
 
@@ -65,6 +66,7 @@ export function AddWidget({ raw, valueOf, onPick, onNewGroup, onNewLink, onClose
         <span>
           <strong>{c.name}</strong>
           <span className="muted small"> · {c.obj.type || '-'}</span>
+          {c.used.length > 0 && <span className="small used"> · på dashboarden: {c.used.map((t) => WIDGET_LABEL[t] || t).join(', ')}</span>}
         </span>
         <span className="muted small">{formatValue(c.obj, valueOf(c.obj)?.value)}</span>
       </button>
@@ -80,13 +82,16 @@ export function AddWidget({ raw, valueOf, onPick, onNewGroup, onNewLink, onClose
         <button type="button" className="btn block-left" onClick={() => onNewGroup('timeline')}>
           <Icon name="chart" size={16} /> Ny tidslinje för på/av, öppet/stängt, rörelse…
         </button>
+        <button type="button" className="btn block-left" onClick={() => onNewGroup('tracker')}>
+          <Icon name="map" size={16} /> Ny karta (Tracker) med position och spår
+        </button>
         <button type="button" className="btn block-left" onClick={onNewLink}>
           <Icon name="link" size={16} /> Ny länkknapp (www) till en annan webbsida
         </button>
       </div>
       <p className="muted small add-hint">
-        Övriga widgets (värde, graf, mätare, brytare, status, börvärde, tryckknapp, enhetskort): välj först en funktion eller enhet nedan, sedan typ i nästa steg.
-        Klicka på en miniatyr för att bara se det som passar.
+        Övriga widgets (värde, graf, mätare, brytare, status, börvärde, tryckknapp, förbrukning, enhetskort): välj först en funktion eller enhet nedan, sedan typ i nästa steg.
+        Klicka på en miniatyr för att bara se det som passar. En funktion kan ha flera widgets, t.ex. både brytare och tryckknapp.
       </p>
       <div className="thumbs" role="group" aria-label="Widgettyper">
         {THUMBS.map((t) => (
@@ -112,7 +117,6 @@ export function AddWidget({ raw, valueOf, onPick, onNewGroup, onNewLink, onClose
           </button>
         </p>
       )}
-      {!all.length && <p className="muted">Alla enheter och funktioner finns redan på dashboarden.</p>}
       {!!all.length && !groups.length && <p className="muted">Inget matchar.</p>}
       {!!groups.length && (
         <>

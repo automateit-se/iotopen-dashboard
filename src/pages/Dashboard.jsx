@@ -10,7 +10,7 @@ import { LinkEditor } from '../components/LinkEditor.jsx';
 import { worstStatus, staleOf, staleDevice } from '../lib/status.js';
 import { errText } from '../components/Modal.jsx';
 import { Icon } from '../components/icons.jsx';
-import { INST_META, OBJ_META, GROUPS, WIDGET_LABEL, THEME_META, applyTheme, isAdmin, writeLayout, writeObjectMeta, suggestType, widgetFunctions, fnName, stateColor, isLight, newLinkKey } from '../lib/dashboard.js';
+import { INST_META, OBJ_META, GROUPS, WIDGET_LABEL, THEME_META, applyTheme, isAdmin, writeLayout, writeObjectMeta, suggestType, widgetFunctions, fnName, stateColor, isLight, newLinkKey, widgetTypes, widgetKey } from '../lib/dashboard.js';
 
 const LIVE_LABEL = { live: 'Live', connecting: 'Ansluter…', offline: 'Polling', failed: 'Polling', off: 'Polling' };
 
@@ -70,24 +70,46 @@ export default function Dashboard({ iid }) {
     }
   };
 
-  const onSaveWidget = async (kind, obj, metaValues, params) => {
-    const key = `${kind === 'device' ? 'd' : 'f'}:${obj.id}`;
-    await writeObjectMeta(iid, kind, obj, metaValues);
+  /**
+   * Layout entries of an object after its list of widget types changed. Each entry follows its type (keys are
+   * "f:<id>" for the first type and "f:<id>:<type>" for the others); `renamed` carries one entry over to a new type.
+   */
+  const relayout = (all, kind, obj, before, after, renamed = {}) => {
+    const byType = Object.fromEntries(before.map((t, i) => [t, all[widgetKey(kind, obj.id, t, i)]]));
+    for (const [from, to] of Object.entries(renamed)) byType[to] = byType[from];
+    before.forEach((t, i) => delete all[widgetKey(kind, obj.id, t, i)]);
+    after.forEach((t, i) => byType[t] && (all[widgetKey(kind, obj.id, t, i)] = byType[t]));
+    return all;
+  };
+
+  /** Saves one widget: `oldType` = the type it had (null for a new widget, which is added to the object's list). */
+  const onSaveWidget = async (kind, obj, oldType, metaValues, params) => {
+    const before = widgetTypes(obj);
+    const type = metaValues.widget;
+    const after = oldType ? before.map((t) => (t === oldType ? type : t)) : [...before, type];
+    await writeObjectMeta(iid, kind, obj, { ...metaValues, widget: after.join(',') });
     // freeze the current visual order so a new widget lands last instead of jumping first
     const all = { ...layout.widgets };
     widgets.forEach((w, i) => (all[w.key] = { ...(all[w.key] || {}), order: i }));
+    relayout(all, kind, obj, before, after, oldType && oldType !== type ? { [oldType]: type } : {});
+    const key = widgetKey(kind, obj.id, type, after.indexOf(type));
     const entry = { ...(all[key] || {}), ...params };
+    if (!entry.color) delete entry.color;
     if (entry.order === undefined) entry.order = widgets.length;
     await writeLayout(iid, { ...layout, widgets: { ...all, [key]: entry } });
     setEditor(null);
     await reload({ quiet: true });
   };
 
-  const onRemoveWidget = async (kind, obj) => {
-    // remove = clear dashboard.widget; nickname/colour/icon stay so the widget can be brought back as it was
-    await writeObjectMeta(iid, kind, obj, { widget: '' });
+  const onRemoveWidget = async (kind, obj, type) => {
+    // remove = take the type out of dashboard.widget; nickname/colour/icon stay so the widget can be brought back
+    const before = widgetTypes(obj);
+    const after = before.filter((t) => t !== type);
+    await writeObjectMeta(iid, kind, obj, { widget: after.join(',') });
+    // the last one: the layout entry stays, so the widget comes back with its size
+    if (after.length) await writeLayout(iid, { ...layout, widgets: relayout({ ...layout.widgets }, kind, obj, before, after) });
     setEditor(null);
-    await reload({ withLayout: false, quiet: true });
+    await reload({ withLayout: !!after.length, quiet: true });
   };
 
   /**
@@ -147,7 +169,7 @@ export default function Dashboard({ iid }) {
   };
 
   const openEditor = (w) =>
-    GROUPS[w.kind] ? setTimelineEditor({ group: w.kind, name: w.name }) : w.kind === 'link' ? setLinkEditor({ key: w.key }) : setEditor({ kind: w.kind, obj: w.obj });
+    GROUPS[w.kind] ? setTimelineEditor({ group: w.kind, name: w.name }) : w.kind === 'link' ? setLinkEditor({ key: w.key }) : setEditor({ kind: w.kind, obj: w.obj, widgetType: w.type, key: w.key });
 
   const onDrop = (targetKey) => {
     if (!dragKey || dragKey === targetKey) return setDragKey(null);
@@ -323,10 +345,11 @@ export default function Dashboard({ iid }) {
           kind={editor.kind}
           obj={editor.obj}
           isNew={editor.isNew}
-          layoutEntry={{ ...(layout.widgets[`${editor.kind === 'device' ? 'd' : 'f'}:${editor.obj.id}`] || {}), ...(editor.isNew ? { suggested: editor.type || suggestType(editor.kind, editor.obj) } : {}) }}
+          widgetType={editor.widgetType}
+          layoutEntry={editor.isNew ? { suggested: editor.type || suggestType(editor.kind, editor.obj) } : layout.widgets[editor.key] || {}}
           onClose={() => setEditor(null)}
-          onSave={(meta, params) => onSaveWidget(editor.kind, editor.obj, meta, params)}
-          onRemove={() => onRemoveWidget(editor.kind, editor.obj)}
+          onSave={(meta, params) => onSaveWidget(editor.kind, editor.obj, editor.isNew ? null : editor.widgetType, meta, params)}
+          onRemove={() => onRemoveWidget(editor.kind, editor.obj, editor.widgetType)}
         />
       )}
       {timelineEditor && raw && (

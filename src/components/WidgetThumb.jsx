@@ -39,6 +39,21 @@ const DRAW = {
       <path d="M27 21a5 5 0 0 1 10 0c0 3 1.5 4 1.5 4h-13s1.5-1 1.5-4M31 27.5a1.2 1.2 0 0 0 2 0" className="th-knob-line" />
     </>
   ),
+  consumption: (
+    <>
+      {[
+        [8, 14],
+        [16, 20],
+        [24, 10],
+        [32, 17],
+        [40, 22],
+        [48, 13],
+      ].map(([x, h]) => (
+        <rect key={x} x={x} y={33 - h} width="6" height={h} rx="1" className="th-fill" />
+      ))}
+      <rect x="56" y="27" width="6" height="6" rx="1" className="th-off" />
+    </>
+  ),
   card: (
     <>
       {[10, 20, 30].map((y) => (

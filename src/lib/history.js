@@ -128,3 +128,47 @@ export async function loadHistory(iid, clientId, topics, from, to, { mode = 'num
   for (const list of byTopic.values()) list.sort((a, b) => a.ts - b.ts);
   return { byTopic, aggr, capped, truncatedFrom, total };
 }
+
+/**
+ * The newest raw values (at most `max` in total) of a few topics between from and to, oldest first.
+ * Used by the Tracker, which needs exact positions rather than averages.
+ * @returns {Promise<Map<string, {ts:number, value:any}[]>>}
+ */
+export async function loadRecent(iid, clientId, topics, from, to, max) {
+  const full = topics.map((t) => (clientId ? `${clientId}/${t}` : t));
+  const byTopic = new Map(topics.map((t) => [t, []]));
+  const base = { from: Math.floor(from), to: Math.ceil(to), topics: full };
+  const pages = [];
+  for (let offset = 0; offset < Math.min(max, CAP.discrete); offset += PAGE) pages.push(() => lynx.log(iid, { ...base, limit: Math.min(PAGE, max - offset), offset, order: 'desc' }));
+  // read page by page and stop at the first short one (no more data)
+  const all = [];
+  for (const p of pages) {
+    const r = await p();
+    all.push(...(r?.data || []));
+    if ((r?.data || []).length < PAGE) break;
+  }
+  for (const e of all.reverse()) byTopic.get(e.topic)?.push({ ts: e.timestamp, value: e.value });
+  return byTopic;
+}
+
+/**
+ * One topic aggregated server side with a fixed interval (e.g. "1h" or "1d") and method (e.g. "last" or
+ * "sum"), for the consumption bars. Falls back to raw values (up to the cap) on IoT Open without aggregation.
+ * @returns {Promise<{ points: {ts:number, value:number}[], aggregated: boolean, capped: boolean }>}
+ */
+export async function loadBuckets(iid, clientId, topic, from, to, method, interval) {
+  const base = { from: Math.floor(from), to: Math.ceil(to), topics: [clientId ? `${clientId}/${topic}` : topic] };
+  let res = null;
+  let aggregated = true;
+  try {
+    res = await readAll(iid, { ...base, aggr_method: method, aggr_interval: interval }, CAP.numeric);
+  } catch {
+    aggregated = false;
+    res = await readAll(iid, base, CAP.numeric);
+  }
+  const points = res.data
+    .map((e) => ({ ts: e.timestamp, value: Number(e.value) }))
+    .filter((p) => Number.isFinite(p.value))
+    .sort((a, b) => a.ts - b.ts);
+  return { points, aggregated, capped: res.capped };
+}
