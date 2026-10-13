@@ -96,7 +96,7 @@ function signal(iid, topic, gen) {
   setStatus({ client_id: 5001, installation_id: iid, topic: 'obj/alarm/1/state', value: 2, msg: '', timestamp: now() - 300 });
   // door bell: a push button that sends 1 while held and 0 when released
   const bell = dev(iid, 'doorbell', 'Dörrklocka');
-  fn(iid, bell, 'button', 'Ringklocka', 'obj/bell/1/state', { topic_write: 'set/obj/bell/1/state', 'dashboard.press': '1', 'dashboard.release': '0' });
+  fn(iid, bell, 'button', 'Ringklocka', 'obj/bell/1/state', { topic_write: 'set/obj/bell/1/state', topic_write_chime: 'set/obj/bell/1/chime', 'dashboard.press': '1', 'dashboard.release': '0' });
   signal(iid, 'obj/zwave/40/motion', (ts) => (new Date(ts * 1000).getHours() >= 7 && new Date(ts * 1000).getHours() <= 18 && Math.random() < 0.45 ? 1 : 0));
   signal(iid, 'obj/zwave/40/tamper', () => 0);
   signal(iid, 'obj/zwave/41/leak', (ts) => (ts % 86400 > 30000 && ts % 86400 < 33000 ? 1 : 0));

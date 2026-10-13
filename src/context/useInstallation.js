@@ -211,11 +211,11 @@ export function useInstallation(iid) {
     return () => listeners.current.delete(fn);
   }, []);
 
-  /** Publishes a value to "<client_id>/<topic_write>". Returns false when MQTT is not connected. */
-  const publish = useCallback((topicWrite, value) => {
+  /** Publishes a value (and optional msg) to "<client_id>/<topic_write>". Returns false when MQTT is not connected. */
+  const publish = useCallback((topicWrite, value, msg = '') => {
     const i = instRef.current;
     if (!i || !mqttRef.current) return false;
-    return mqttRef.current.publish(`${i.client_id}/${normTopic(topicWrite)}`, { value: Number.isFinite(Number(value)) ? Number(value) : value, timestamp: Math.floor(Date.now() / 1000) });
+    return mqttRef.current.publish(`${i.client_id}/${normTopic(topicWrite)}`, { value: Number.isFinite(Number(value)) ? Number(value) : value, timestamp: Math.floor(Date.now() / 1000), ...(msg ? { msg } : {}) });
   }, []);
 
   const valueOfTopic = useCallback((topic) => (topic ? byTopic.current.get(normTopic(topic)) || null : null), []);

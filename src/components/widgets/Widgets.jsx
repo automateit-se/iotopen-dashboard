@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { formatValue, formatAge, isOn, onOffValues } from '../../lib/format.js';
-import { fnName, writeTopic, onOffTopics, rangeOf, isBinary, isHidden, stateColor, safeUrl, OBJ_META } from '../../lib/dashboard.js';
+import { fnName, writeTopic, onOffTopics, rangeOf, isBinary, isHidden, stateColor, safeUrl, controlTopic, OBJ_META } from '../../lib/dashboard.js';
 import { Icon } from '../icons.jsx';
 import { TimelineWidget } from './Timeline.jsx';
 import { MultiChartWidget } from './MultiChart.jsx';
@@ -45,7 +45,9 @@ export function StatusWidget({ w, ctx }) {
 
 // ---- switch (publishes to topic_write, or topic_write_onoff for dimmers) --------------------------
 export function Toggle({ fn, ctx, compact = false }) {
-  const { read, write } = onOffTopics(fn);
+  const { read, write: usual } = onOffTopics(fn);
+  const write = controlTopic(fn, usual);
+  const msgOf = (next) => String(fn.meta?.[next ? OBJ_META.on_msg : OBJ_META.off_msg] ?? '').trim();
   const v = ctx.valueOfTopic(read);
   const on = v ? isOn(fn, v.value) : false;
   const [pending, setPending] = useState(null);
@@ -56,7 +58,7 @@ export function Toggle({ fn, ctx, compact = false }) {
   const click = () => {
     if (!write) return setErr('Funktionen saknar topic_write');
     const next = !shown;
-    if (!ctx.publish(write, next ? onVal : offVal)) return setErr('Ingen MQTT-anslutning');
+    if (!ctx.publish(write, next ? onVal : offVal, msgOf(next))) return setErr('Ingen MQTT-anslutning');
     setErr('');
     setPending(next);
     setTimeout(() => setPending(null), 8000); // fall back to the reported state if nothing comes back
@@ -158,9 +160,11 @@ export function NumberWidget({ w, ctx }) {
  */
 export function ButtonWidget({ w, ctx }) {
   const fn = w.obj;
-  const write = writeTopic(fn);
+  const write = controlTopic(fn, writeTopic(fn));
   const press = String(fn.meta?.[OBJ_META.press] ?? '').trim() || '1';
   const release = String(fn.meta?.[OBJ_META.release] ?? '').trim();
+  const pressMsg = String(fn.meta?.[OBJ_META.press_msg] ?? '').trim();
+  const releaseMsg = String(fn.meta?.[OBJ_META.release_msg] ?? '').trim();
   const [down, setDown] = useState(false);
   const [err, setErr] = useState('');
   const held = useRef(false);
@@ -169,7 +173,7 @@ export function ButtonWidget({ w, ctx }) {
   const start = () => {
     if (held.current) return;
     if (!write) return setErr('Funktionen saknar topic_write');
-    if (!ctx.publish(write, press)) return setErr('Ingen MQTT-anslutning');
+    if (!ctx.publish(write, press, pressMsg)) return setErr('Ingen MQTT-anslutning');
     held.current = true;
     setErr('');
     setDown(true);
@@ -178,7 +182,7 @@ export function ButtonWidget({ w, ctx }) {
     if (!held.current) return;
     held.current = false;
     setDown(false);
-    if (release !== '' && !ctx.publish(write, release)) setErr('Ingen MQTT-anslutning');
+    if (release !== '' && !ctx.publish(write, release, releaseMsg)) setErr('Ingen MQTT-anslutning');
   };
   const key = (e) => (e.key === ' ' || e.key === 'Enter') && (e.preventDefault(), e.type === 'keydown' ? !e.repeat && start() : end());
 

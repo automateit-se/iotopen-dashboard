@@ -4,7 +4,7 @@ import { Icon, ICON_NAMES } from './icons.jsx';
 import { RANGE_OPTIONS } from './widgets/RangePicker.jsx';
 import { AGGR_METHODS } from '../lib/history.js';
 import { STATUS_META, STATUS_TEXT, parseLimits } from '../lib/status.js';
-import { FUNCTION_WIDGETS, DEVICE_WIDGETS, DEFAULT_LAYOUT, OBJ_META, WIDTH_OPTIONS, HALF_HEIGHT_TYPES, heightOptions, writeTopic, isHidden, stateColorKey, widgetTypes, WIDGET_LABEL } from '../lib/dashboard.js';
+import { FUNCTION_WIDGETS, DEVICE_WIDGETS, DEFAULT_LAYOUT, OBJ_META, WIDTH_OPTIONS, HALF_HEIGHT_TYPES, heightOptions, writeTopic, onOffTopics, controlTopic, topicKeys, isHidden, stateColorKey, widgetTypes, WIDGET_LABEL } from '../lib/dashboard.js';
 import { stateMap } from '../lib/format.js';
 import { ColorPicker, SeriesColor } from './ColorPicker.jsx';
 import { PERIODS, MODES } from './widgets/Consumption.jsx';
@@ -67,6 +67,13 @@ export function WidgetEditor({ kind, obj, widgetType, layoutEntry, isNew, onSave
   const setState = (i, patch) => setStates((rows) => rows.map((r, j) => (j === i ? { ...r, ...patch } : r)));
   const [press, setPress] = useState(m[OBJ_META.press] || '');
   const [release, setRelease] = useState(m[OBJ_META.release] || '');
+  // advanced control (switch/button): msg with the value, and another topic; hidden until "Avancerat" is ticked
+  const [msgA, setMsgA] = useState(m[OBJ_META.press_msg] || m[OBJ_META.on_msg] || '');
+  const [msgB, setMsgB] = useState(m[OBJ_META.release_msg] || m[OBJ_META.off_msg] || '');
+  const [topic, setTopic] = useState(m[OBJ_META.topic] || '');
+  const keys = topicKeys(obj);
+  const [customTopic, setCustomTopic] = useState(() => !!m[OBJ_META.topic] && !keys.includes(m[OBJ_META.topic]));
+  const [advanced, setAdvanced] = useState(() => !!(m[OBJ_META.press_msg] || m[OBJ_META.release_msg] || m[OBJ_META.on_msg] || m[OBJ_META.off_msg] || m[OBJ_META.topic]));
   const initiallyVisible = !isHidden(obj);
   const [visible, setVisible] = useState(initiallyVisible);
   const [busy, setBusy] = useState(false);
@@ -108,6 +115,16 @@ export function WidgetEditor({ kind, obj, widgetType, layoutEntry, isNew, onSave
         for (const r of keyed) Object.assign(st, { [`state_${r.key}`]: String(r.value).trim(), [`text_${r.key}`]: r.text.trim(), [stateColorKey(r.key)]: r.color.trim() });
       }
       const btn = kind === 'function' && type === 'button' ? { press: press.trim(), release: release.trim() } : {};
+      // the advanced fields belong to the type being edited; turning "Avancerat" off clears them
+      const on = advanced && kind === 'function';
+      const t = on ? topic.trim() : '';
+      if (t && !/^topic_/.test(t) && !/^[^\s#+]+$/.test(t)) throw new Error('Topic får inte innehålla mellanslag, # eller +.');
+      const adv =
+        kind === 'function' && type === 'button'
+          ? { press_msg: on ? msgA.trim() : '', release_msg: on ? msgB.trim() : '', topic: t }
+          : kind === 'function' && type === 'switch'
+            ? { on_msg: on ? msgA.trim() : '', off_msg: on ? msgB.trim() : '', topic: t }
+            : {};
       // IoT Open's own "visible" flag: always written as "true"/"false" (never deleted), and only when changed
       const vis = kind === 'function' && visible !== initiallyVisible ? { visible: visible ? 'true' : 'false' } : {};
       if (limitsCheck.error) throw new Error(`Gränsvärden: ${limitsCheck.error}`);
@@ -115,7 +132,7 @@ export function WidgetEditor({ kind, obj, widgetType, layoutEntry, isNew, onSave
         kind === 'function'
           ? { [STATUS_META.limits]: limits.trim(), [STATUS_META.status]: status, [STATUS_META.text]: status ? statusText.trim() : '' }
           : {};
-      await onSave({ widget: type, nickname: nickname.trim(), ...(several ? {} : { color: color.trim() }), icon, ...vis, ...lim, ...st, ...btn }, params);
+      await onSave({ widget: type, nickname: nickname.trim(), ...(several ? {} : { color: color.trim() }), icon, ...vis, ...lim, ...st, ...btn, ...adv }, params);
     } catch (e) {
       setError(errText(e));
       setBusy(false);
@@ -349,7 +366,52 @@ export function WidgetEditor({ kind, obj, widgetType, layoutEntry, isNew, onSave
           </Field>
         </>
       )}
-      {(type === 'switch' || type === 'number' || type === 'button') && !writeTopic(obj) && <div className="warn-box">Funktionen saknar topic_write, så den kan inte styras härifrån.</div>}
+      {kind === 'function' && (type === 'switch' || type === 'button') && (
+        <>
+          <label className="check visible-check">
+            <input type="checkbox" checked={advanced} onChange={(e) => setAdvanced(e.target.checked)} />
+            <span>Avancerat: meddelande och topic</span>
+          </label>
+          {advanced && (
+            <>
+              <div className="row gap">
+                <Field label={type === 'button' ? 'Meddelande vid tryck (dashboard.press_msg)' : 'Meddelande vid på (dashboard.on_msg)'} help='Skickas som "msg" tillsammans med värdet. Tomt = inget meddelande.'>
+                  <input value={msgA} onChange={(e) => setMsgA(e.target.value)} />
+                </Field>
+                <Field label={type === 'button' ? 'Meddelande vid släpp (dashboard.release_msg)' : 'Meddelande vid av (dashboard.off_msg)'} help={type === 'button' ? 'Skickas med värdet vid släpp, om ett sådant är satt.' : 'Skickas som "msg" när brytaren slås av.'}>
+                  <input value={msgB} onChange={(e) => setMsgB(e.target.value)} />
+                </Field>
+              </div>
+              <Field label="Topic att skicka på (dashboard.topic)" help={`Skickas nu till ${controlTopic({ meta: { ...m, [OBJ_META.topic]: topic } }, type === 'switch' ? onOffTopics(obj).write : writeTopic(obj)) || '(inget topic)'}.`}>
+                <select
+                  value={customTopic ? '__custom' : topic}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setCustomTopic(v === '__custom');
+                    setTopic(v === '__custom' ? '' : v);
+                  }}
+                >
+                  <option value="">Standard ({type === 'switch' && m.topic_write_onoff ? 'topic_write_onoff' : 'topic_write'})</option>
+                  {keys
+                    .filter((k) => k !== (type === 'switch' && m.topic_write_onoff ? 'topic_write_onoff' : 'topic_write'))
+                    .map((k) => (
+                      <option key={k} value={k}>
+                        {k} · {m[k]}
+                      </option>
+                    ))}
+                  <option value="__custom">Eget topic…</option>
+                </select>
+              </Field>
+              {customTopic && (
+                <Field label="Eget topic" help="Utan client id, t.ex. set/obj/grind/1. Skickas till &lt;client id&gt;/topic.">
+                  <input value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="set/obj/…" spellCheck={false} />
+                </Field>
+              )}
+            </>
+          )}
+        </>
+      )}
+      {(type === 'switch' || type === 'number' || type === 'button') && !writeTopic(obj) && !(type !== 'number' && advanced && topic.trim()) && <div className="warn-box">Funktionen saknar topic_write, så den kan inte styras härifrån.</div>}
       {error && <div className="error-box">{error}</div>}
     </Modal>
   );

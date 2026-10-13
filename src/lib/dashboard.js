@@ -10,6 +10,8 @@
 //                       dashboard.icon       icon name, see components/icons.jsx
 //                       dashboard.color_<x>  colour for the state state_<x> (value/status widgets, e.g. a banner)
 //                       dashboard.press / dashboard.release  values a push button sends (release optional)
+//                       dashboard.press_msg / release_msg / on_msg / off_msg  optional "msg" sent with the value
+//                       dashboard.topic      where switch/button publish: a topic_* key of the function or a topic
 //   Installation file   dashboard-layout.json  order, size and technical parameters per widget
 //                       dashboard-logo.png     logo in the header instead of IoT Open's (no file = default)
 //
@@ -45,6 +47,12 @@ export const OBJ_META = {
   // push button: value sent while pressed, and (optional) when released
   press: 'dashboard.press',
   release: 'dashboard.release',
+  // advanced control: a message ("msg") sent with the value, and another topic to publish to
+  press_msg: 'dashboard.press_msg',
+  release_msg: 'dashboard.release_msg',
+  on_msg: 'dashboard.on_msg',
+  off_msg: 'dashboard.off_msg',
+  topic: 'dashboard.topic',
 };
 
 /** Meta key for the colour of state_<x>. */
@@ -142,8 +150,9 @@ export const heightOptions = (type) => [...(HALF_HEIGHT_TYPES.includes(type) ? [
 export function fitsType(type, kind, obj) {
   if (type === 'card') return kind === 'device';
   if (kind !== 'function') return false;
-  if (type === 'switch') return !!writeTopic(obj) && isBinary(obj);
-  if (type === 'number' || type === 'button') return !!writeTopic(obj);
+  if (type === 'switch') return !!controlTopic(obj, writeTopic(obj)) && isBinary(obj);
+  if (type === 'button') return !!controlTopic(obj, writeTopic(obj));
+  if (type === 'number') return !!writeTopic(obj);
   if (type === 'status') return isDiscrete(obj);
   if (type === 'consumption') return !isDiscrete(obj);
   return true;
@@ -205,6 +214,19 @@ export const widgetKey = (kind, id, type, index) => (index === 0 ? keyOf(kind, i
 
 /** Topic to publish control values to (topic_set is accepted as a legacy alias). */
 export const writeTopic = (fn) => fn?.meta?.topic_write || fn?.meta?.topic_set || '';
+
+/** The function's topic_* keys with a value, for choosing where to publish. */
+export const topicKeys = (fn) => Object.keys(fn?.meta || {}).filter((k) => /^topic_/.test(k) && String(fn.meta[k] || '').trim());
+
+/**
+ * Where a switch or push button publishes: dashboard.topic names one of the function's topic_* keys (e.g.
+ * "topic_write_2") or is a topic itself; empty = the usual topic (fallback).
+ */
+export function controlTopic(fn, fallback) {
+  const t = String(fn?.meta?.[OBJ_META.topic] || '').trim();
+  if (!t) return fallback;
+  return /^topic_/.test(t) ? String(fn.meta?.[t] || '').trim() || fallback : t;
+}
 
 /** Range for level-type functions, or null. */
 export function rangeOf(fn) {
