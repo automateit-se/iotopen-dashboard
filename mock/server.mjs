@@ -120,6 +120,13 @@ function signal(iid, topic, gen) {
   fn(iid, car, 'longitude', 'Servicebil longitud', 'obj/gps/1/lon', { format: '%.5f', 'dashboard.tracker': 'Fordon' });
   const boat = dev(iid, 'boat', 'Arbetsbåt');
   fn(iid, boat, 'geohash', 'Arbetsbåt position', 'obj/gps/2/geohash', { 'dashboard.tracker': 'Fordon' });
+  // a machine with two position sources: the editor lets you pick which latitude + longitude to use
+  const digger = dev(iid, 'tracker', 'Grävmaskin');
+  fn(iid, digger, 'latitude', 'Latitude', 'obj/gps/3/lat', { format: '%.5f' });
+  fn(iid, digger, 'longitude', 'Longitude', 'obj/gps/3/lon', { format: '%.5f' });
+  fn(iid, digger, 'latitude', 'Latitude GPS2', 'obj/gps/3/lat2', { format: '%.5f' });
+  fn(iid, digger, 'longitude', 'Longitude GPS2', 'obj/gps/3/lon2', { format: '%.5f' });
+  for (const [topic, v] of [['obj/gps/3/lat', 59.341], ['obj/gps/3/lon', 18.031], ['obj/gps/3/lat2', 59.3412], ['obj/gps/3/lon2', 18.0313]]) setStatus({ client_id: 5001, installation_id: iid, topic, value: v, msg: '', timestamp: now() - 1800 });
   // water meter: a counter in litres, logged every hour for more than a year
   const water = dev(iid, 'water_meter', 'Vattenmätare');
   fn(iid, water, 'water_meter', 'Vatten', 'obj/water/1/total', { format: '%.0f l', unit: 'l', 'dashboard.widget': 'consumption', 'dashboard.icon': 'droplet', 'dashboard.color': '#2563eb' });

@@ -15,6 +15,15 @@ export const MODES = [
   ['counter', 'Mätarställning (räkneverk)'],
   ['delta', 'Förbrukning per värde (summeras)'],
 ];
+// what a viewer can switch between in the widget (not saved; the editor sets the default)
+export const VIEWS = [
+  ['hour', 24, '24 h'],
+  ['day', 7, '7 d'],
+  ['day', 30, '30 d'],
+  ['week', 12, '12 v'],
+  ['week', 52, '52 v'],
+  ['month', 12, '12 mån'],
+];
 const DAY = 86400;
 const WEEKDAYS = ['sön', 'mån', 'tis', 'ons', 'tor', 'fre', 'lör'];
 const MONTHS = ['jan', 'feb', 'mar', 'apr', 'maj', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec'];
@@ -96,9 +105,14 @@ const fmtNum = (v) => {
 /** Bars per hour/day/week/month from a meter reading (or per-value consumption), from aggregated history. */
 export function ConsumptionWidget({ w, ctx, iid }) {
   const s = { ...CONSUMPTION_DEFAULTS, ...w.layout };
-  const period = PERIODS.some(([p]) => p === s.period) ? s.period : 'day';
-  const maxCount = PERIODS.find(([p]) => p === period)[2];
-  const count = Math.max(1, Math.min(maxCount, Number(s.count) || 7));
+  const savedPeriod = PERIODS.some(([p]) => p === s.period) ? s.period : 'day';
+  const savedCount = Math.max(1, Math.min(PERIODS.find(([p]) => p === savedPeriod)[2], Number(s.count) || 7));
+  // the viewer's choice of interval, back to the saved one when the widget is edited
+  const [view, setView] = useState(null);
+  useEffect(() => setView(null), [savedPeriod, savedCount]);
+  const period = view ? view[0] : savedPeriod;
+  const count = view ? view[1] : savedCount;
+  const views = VIEWS.some(([p, n]) => p === savedPeriod && n === savedCount) ? VIEWS : [[savedPeriod, savedCount, 'Standard'], ...VIEWS];
   const mode = s.mode === 'delta' ? 'delta' : 'counter';
   const topic = normTopic(w.obj?.meta?.topic_read);
   const unit = unitOf(w.obj);
@@ -158,19 +172,26 @@ export function ConsumptionWidget({ w, ctx, iid }) {
   return (
     <div className="cons">
       <div className="cons-top">
-        <div>
+        <div className="grow">
           <div className="mid">{values[shown] === null ? '-' : fmtNum(values[shown]) + u}</div>
           <div className="muted small">
             {hover === null ? `Nu, ${buckets[shown].label}` : buckets[shown].label}
             {hover === null && buckets.length > 1 && ` · totalt ${fmtNum(total)}${u}, snitt ${fmtNum(avg)}${u} per ${periodText}`}
           </div>
         </div>
+        <span className="range-pick" role="group" aria-label="Tidsintervall">
+          {views.map(([p, n, l]) => (
+            <button key={`${p}${n}`} type="button" className={p === period && n === count ? 'on' : ''} onClick={() => setView(p === savedPeriod && n === savedCount ? null : [p, n])}>
+              {l}
+            </button>
+          ))}
+        </span>
       </div>
       {!known.length || max === 0 ? (
         <div className="muted small">Ingen förbrukning i perioden.</div>
       ) : (
         <div className="cons-plot" ref={plot} onPointerLeave={() => setHover(null)}>
-          <span className="cons-max small muted">{fmtNum(max) + u}</span>
+          <span className="cons-max small muted" title="Högsta stapelns värde, toppen på skalan">max {fmtNum(max) + u}</span>
           <div className="cons-bars">
             {buckets.map((b, i) => (
               <div

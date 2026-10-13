@@ -331,9 +331,10 @@ li.stale .val, .tl-label.stale .tl-now { opacity: 0.45; }
 
 /* ---- consumption (bars) ---- */
 .cons { display: flex; flex-direction: column; height: 100%; min-height: 0; gap: 4px; padding-top: 4px; }
-.cons-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.cons-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
 .cons-plot { position: relative; flex: 1; min-height: 60px; display: flex; flex-direction: column; }
 .cons-max { position: absolute; top: 0; left: 0; }
+.cons-bars { background: linear-gradient(var(--border), var(--border)) 0 16px / 100% 1px no-repeat; }
 .cons-bars { flex: 1; min-height: 0; display: flex; align-items: stretch; gap: 2px; padding-top: 16px; border-bottom: 1px solid var(--border); }
 .cons-col { position: relative; flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: flex-end; }
 .cons-bar { background: var(--tile-color); border-radius: 3px 3px 0 0; opacity: 0.85; }
@@ -434,6 +435,12 @@ input[aria-invalid='true'] { border-color: var(--danger); }
 .dev-head .chev { transform: rotate(180deg); transition: transform 0.15s; color: var(--muted); flex: none; }
 .dev-list li.open > .dev-head .chev { transform: rotate(-90deg); }
 .dev-list .pick-list { margin: 4px 0 6px 18px; }
+.tracker-pick { margin-top: 10px; max-height: 360px; overflow: auto; }
+.tracker-dev { align-items: center; }
+.tracker-dev .check { flex: none; }
+.tracker-dev .dev-head { min-width: 0; }
+.tracker-fns { margin: 4px 0 6px 30px; max-height: none; }
+.warn-text { color: var(--status-warn-text); font-weight: 600; }
 .link-btn.small { font-size: 12.5px; }
 .used { color: var(--accent); }
 
