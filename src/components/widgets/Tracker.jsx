@@ -5,7 +5,7 @@ import { loadRecent } from '../../lib/history.js';
 import { devName, fnName, safeColor, SERIES_COLORS, SERIES_COLORS_DARK } from '../../lib/dashboard.js';
 import { geoRole, pairPositions, geohashPositions, project, unproject, fitZoom, centreOf, TILE } from '../../lib/geo.js';
 import { useDark } from './MultiChart.jsx';
-import { fmtWhen } from './RangePicker.jsx';
+import { fmtWhen, RangePicker, useTimeWindow } from './RangePicker.jsx';
 
 export const TRACKER_DEFAULTS = { hours: 24, points: 200, pair: 5, fade: true };
 const MAX_ZOOM = 18;
@@ -42,7 +42,9 @@ function positionsOf(track, series, pair) {
 /** Map with live position and fading trail ("snail trail") per device. */
 export function TrackerWidget({ w, ctx, iid }) {
   const s = { ...TRACKER_DEFAULTS, ...w.layout };
-  const hours = Number(s.hours) || 24;
+  // the viewer can switch the history (1 h … 1 år) like in the graphs; the editor sets the default
+  const tw = useTimeWindow(s.hours);
+  const hours = tw.hours;
   const maxPoints = Math.max(1, Number(s.points) || 200);
   const pair = Math.max(0, Number(s.pair) || 0);
   const tracks = useMemo(() => tracksOf(w.functions, ctx.raw), [w.functions, ctx.raw]);
@@ -107,15 +109,27 @@ export function TrackerWidget({ w, ctx, iid }) {
       .filter((t) => t.points.length);
   }, [series, tracks, pair, hours, maxPoints, palette, w.layout.series]);
 
+  const top = (
+    <div className="tracker-top">
+      <RangePicker tw={tw} />
+    </div>
+  );
   if (!tracks.some((t) => t.ok))
     return <div className="muted small">Kartan behöver per enhet en funktion av typen latitude + longitude, eller en geohash.</div>;
-  if (err) return <div className="muted small">{err}</div>;
-  if (!series) return <div className="muted small">Läser positioner…</div>;
-  if (!drawn.length) return <div className="muted small">Inga positioner ännu.</div>;
+  const note = (text) => (
+    <div className="tracker">
+      {top}
+      <div className="muted small">{text}</div>
+    </div>
+  );
+  if (err) return note(err);
+  if (!series) return note('Läser positioner…');
+  if (!drawn.length) return note('Inga positioner ännu.');
 
   const newest = Math.max(...drawn.map((t) => t.points[t.points.length - 1].ts));
   return (
     <div className="tracker">
+      {top}
       <MapView tracks={drawn} fade={s.fade !== false} />
       <div className="tracker-legend small">
         {drawn.length > 1 &&
