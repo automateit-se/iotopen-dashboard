@@ -138,7 +138,17 @@ export function MultiChartWidget({ w, ctx, iid, single = false }) {
               })}
               {hover && <line x1={X(hover)} x2={X(hover)} y1="0" y2="100" className="hover-line" vectorEffect="non-scaling-stroke" />}
             </svg>
-            {hover && <span className="mchart-hover-time small">{fmtWhen(hover, span)}</span>}
+            {hover && (
+              // floats over the graph (follows the pointer) so nothing below it moves
+              <span className="mchart-hover-time small" style={{ left: `${Math.min(88, Math.max(12, ((hover - t0) / span) * 100))}%` }}>
+                {fmtWhen(hover, span)}
+                {single && (() => {
+                  const p = hist.byTopic.get(normTopic(w.obj.meta?.topic_read)) || [];
+                  const idx = at(p, hover);
+                  return <strong className={stClass(w.obj, idx >= 0 ? p[idx].value : undefined)}> · {formatValue(w.obj, idx >= 0 ? p[idx].value : undefined)}</strong>;
+                })()}
+              </span>
+            )}
           </ZoomSurface>
           <span />
           <div className="mchart-x small muted">
@@ -152,7 +162,7 @@ export function MultiChartWidget({ w, ctx, iid, single = false }) {
       )}
       {hist?.aggr && <div className="data-note">Visar {aggrLabel(hist.aggr.method, hist.aggr.interval)}. Zooma in för fler detaljer.</div>}
       {hist?.capped && <div className="data-note">Visar de första {(30000).toLocaleString('sv-SE')} av {hist.total.toLocaleString('sv-SE')} värden.</div>}
-      {(!single || hover) && (
+      {!single && (
         <ul className="mchart-legend">
           {fns.map((f, i) => {
             const p = hist?.byTopic.get(normTopic(f.meta?.topic_read)) || [];

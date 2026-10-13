@@ -96,7 +96,7 @@ function signal(iid, topic, gen) {
   setStatus({ client_id: 5001, installation_id: iid, topic: 'obj/alarm/1/state', value: 2, msg: '', timestamp: now() - 300 });
   // door bell: a push button that sends 1 while held and 0 when released
   const bell = dev(iid, 'doorbell', 'Dörrklocka');
-  fn(iid, bell, 'button', 'Ringklocka', 'obj/bell/1/state', { topic_write: 'set/obj/bell/1/state', 'dashboard.press': '1', 'dashboard.release': '0' });
+  fn(iid, bell, 'button', 'Ringklocka', 'obj/bell/1/state', { topic_write: 'set/obj/bell/1/state', topic_write_chime: 'set/obj/bell/1/chime', 'dashboard.press': '1', 'dashboard.release': '0' });
   signal(iid, 'obj/zwave/40/motion', (ts) => (new Date(ts * 1000).getHours() >= 7 && new Date(ts * 1000).getHours() <= 18 && Math.random() < 0.45 ? 1 : 0));
   signal(iid, 'obj/zwave/40/tamper', () => 0);
   signal(iid, 'obj/zwave/41/leak', (ts) => (ts % 86400 > 30000 && ts % 86400 < 33000 ? 1 : 0));
@@ -120,6 +120,13 @@ function signal(iid, topic, gen) {
   fn(iid, car, 'longitude', 'Servicebil longitud', 'obj/gps/1/lon', { format: '%.5f', 'dashboard.tracker': 'Fordon' });
   const boat = dev(iid, 'boat', 'Arbetsbåt');
   fn(iid, boat, 'geohash', 'Arbetsbåt position', 'obj/gps/2/geohash', { 'dashboard.tracker': 'Fordon' });
+  // a machine with two position sources: the editor lets you pick which latitude + longitude to use
+  const digger = dev(iid, 'tracker', 'Grävmaskin');
+  fn(iid, digger, 'latitude', 'Latitude', 'obj/gps/3/lat', { format: '%.5f' });
+  fn(iid, digger, 'longitude', 'Longitude', 'obj/gps/3/lon', { format: '%.5f' });
+  fn(iid, digger, 'latitude', 'Latitude GPS2', 'obj/gps/3/lat2', { format: '%.5f' });
+  fn(iid, digger, 'longitude', 'Longitude GPS2', 'obj/gps/3/lon2', { format: '%.5f' });
+  for (const [topic, v] of [['obj/gps/3/lat', 59.341], ['obj/gps/3/lon', 18.031], ['obj/gps/3/lat2', 59.3412], ['obj/gps/3/lon2', 18.0313]]) setStatus({ client_id: 5001, installation_id: iid, topic, value: v, msg: '', timestamp: now() - 1800 });
   // water meter: a counter in litres, logged every hour for more than a year
   const water = dev(iid, 'water_meter', 'Vattenmätare');
   fn(iid, water, 'water_meter', 'Vatten', 'obj/water/1/total', { format: '%.0f l', unit: 'l', 'dashboard.widget': 'consumption', 'dashboard.icon': 'droplet', 'dashboard.color': '#2563eb' });

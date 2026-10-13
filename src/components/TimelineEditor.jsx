@@ -5,6 +5,7 @@ import { ColorPicker, SeriesColor } from './ColorPicker.jsx';
 import { RANGE_OPTIONS } from './widgets/RangePicker.jsx';
 import { AGGR_METHODS } from '../lib/history.js';
 import { isGeo, geoRole } from '../lib/geo.js';
+import { TrackerPicker, geoDevices, trackProblem } from './TrackerPicker.jsx';
 
 const TEXT = {
   timeline: {
@@ -29,7 +30,7 @@ const TEXT = {
     newTitle: 'Ny karta (Tracker)',
     editTitle: 'Redigera karta',
     defaultName: 'Positioner',
-    intro: 'Visar nuvarande position och ett spår av tidigare positioner. Välj per enhet en funktion av typen latitude och en av typen longitude, eller en geohash. Funktioner på samma enhet blir ett spår.',
+    intro: 'Visar nuvarande position och ett spår av tidigare positioner. Bocka i de enheter som ska synas. Har en enhet flera positionsfunktioner kan du klicka på den och välja vilka: en latitude + en longitude, eller en geohash.',
     showOther: 'Visa alla funktioner',
     none: 'Inga funktioner av typen latitude, longitude eller geohash hittades.',
     remove: 'Ta bort kartan',
@@ -97,7 +98,11 @@ export function TimelineEditor({ group = 'timeline', raw, name: oldName, layoutE
     setError('');
     if (!clean) return setError('Ge den ett namn.');
     if (clean !== oldName && existingNames.includes(clean)) return setError(`Det finns redan en ${g.label} som heter "${clean}".`);
-    if (!selected.size) return setError('Välj minst en funktion.');
+    if (!selected.size) return setError(group === 'tracker' ? 'Välj minst en enhet.' : 'Välj minst en funktion.');
+    if (group === 'tracker') {
+      const bad = geoDevices(raw, { showHidden: true, selected }).find((d) => trackProblem(d, selected));
+      if (bad) return setError(`${bad.name} ${trackProblem(bad, selected)}. Välj både latitud och longitud, eller en geohash.`);
+    }
     setBusy(true);
     try {
       const bad = [color, ...Object.values(series)].find((c) => c && !safeColor(c));
@@ -136,7 +141,7 @@ export function TimelineEditor({ group = 'timeline', raw, name: oldName, layoutE
             Avbryt
           </button>
           <button type="button" className="btn primary" onClick={save} disabled={busy}>
-            {busy ? 'Sparar…' : `Spara (${selected.size})`}
+            {busy ? 'Sparar…' : `Spara (${group === 'tracker' ? geoDevices(raw, { showHidden: true, selected }).filter((d) => [...d.gh, ...d.lat, ...d.lon].some((f) => selected.has(f.id))).length : selected.size})`}
           </button>
         </>
       }
@@ -188,7 +193,7 @@ export function TimelineEditor({ group = 'timeline', raw, name: oldName, layoutE
         label="Färg"
         help={
           group === 'tracker'
-            ? 'Färg på widgetens kant och ikon. Varje spår får en egen färg automatiskt, eller en egen färg i listan nedan.'
+            ? 'Färg på widgetens kant och ikon. Varje enhet får en egen färg automatiskt, eller en egen färg i listan nedan.'
             : group === 'timeline'
             ? 'Färg på alla rader i tidslinjen. Tomt = temats widgetfärg. En enskild rad kan få egen färg i listan nedan.'
             : 'Färg på widgetens kant och ikon. Linjerna får var sin färg automatiskt, eller en egen färg i listan nedan.'
@@ -213,16 +218,21 @@ export function TimelineEditor({ group = 'timeline', raw, name: oldName, layoutE
         </Field>
       )}
       <div className="row gap wrap">
-        <input className="search grow" placeholder="Sök funktion, typ eller enhet…" value={q} onChange={(e) => setQ(e.target.value)} />
-        <label className="check small">
-          <input type="checkbox" checked={showAll} onChange={(e) => setShowAll(e.target.checked)} /> {tx.showOther}
-        </label>
+        <input className="search grow" placeholder={group === 'tracker' ? 'Sök enhet eller funktion…' : 'Sök funktion, typ eller enhet…'} value={q} onChange={(e) => setQ(e.target.value)} />
+        {group !== 'tracker' && (
+          <label className="check small">
+            <input type="checkbox" checked={showAll} onChange={(e) => setShowAll(e.target.checked)} /> {tx.showOther}
+          </label>
+        )}
         {(hiddenCount > 0 || showHidden) && (
           <label className="check small" title='Funktioner med meta visible = "false"'>
             <input type="checkbox" checked={showHidden} onChange={(e) => setShowHidden(e.target.checked)} /> Visa dolda ({hiddenCount})
           </label>
         )}
       </div>
+      {group === 'tracker' ? (
+        <TrackerPicker raw={raw} selected={selected} setSelected={setSelected} series={series} setSeries={setSeries} oldName={oldName} metaKey={g.metaKey} q={q} showHidden={showHidden} />
+      ) : (
       <ul className="check-list">
         {list.map((f) => (
           <li key={f.id} className="row gap">
@@ -246,6 +256,7 @@ export function TimelineEditor({ group = 'timeline', raw, name: oldName, layoutE
         ))}
         {!list.length && <li className="muted small">{tx.none}</li>}
       </ul>
+      )}
       {group === 'chart' && units.length > 1 && <div className="warn-box">Olika enheter ({units.join(', ')}) delar samma y-axel.</div>}
       {error && <div className="error-box">{error}</div>}
     </Modal>
