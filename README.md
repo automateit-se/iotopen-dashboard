@@ -76,6 +76,8 @@ If the repository is private the package is private too. Then `docker login ghcr
 | `LIVE_UPDATES`            | `true`                    | `false` turns MQTT off; only polling is used                                                                                                                    |
 | `BASE_PATH`               | *(empty)*                 | Path prefix the container itself serves under, e.g. `/dashboard` (no trailing slash). Only needed when a reverse proxy forwards the prefix unchanged, see below |
 | `CUSTOM_SERVERS`          | `true`                    | `true` lets users type another IoT Open server on the sign-in page (saved in their browser; the CSP then allows `https:`/`wss:` connections). `false` = only `LYNX_URL` |
+| `MAP_TILES`               | `https://tile.openstreetmap.org/{z}/{x}/{y}.png` | Map tiles for the *Tracker* widget: an `https://` URL template with `{z}`, `{x}` and `{y}`. Its origin is added to the CSP `img-src`. Empty = no map background (only the tracks are drawn). For heavy use, run or rent a tile server rather than using OpenStreetMap's public one, see their [tile usage policy](https://operations.osmfoundation.org/policies/tiles/) |
+| `MAP_ATTRIBUTION`         | `© OpenStreetMap-bidragsgivare` | Attribution shown in the corner of the map                                                                                                                 |
 | `API_MODE`                | `proxy`                   | `proxy`: the browser talks to this container, which relays `/api` and `/mqtt` to `LYNX_URL`. `direct`: the browser talks to `LYNX_URL` itself and the container only serves the app (`/api` and `/mqtt` answer 404) |
 
 ### Proxy or direct
@@ -141,12 +143,13 @@ A function or device appears on the dashboard when it has `dashboard.widget`. Ev
 
 | Key                  | Values                                                                                                                                                                                                                                          |
 |----------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `dashboard.widget`   | Function: `value`, `chart`, `gauge`, `switch`, `status`, `number`, `button`. Device: `card`. Several types comma separated, e.g. `switch,button`, give one widget each. Empty = not shown                                                         |
+| `dashboard.widget`   | Function: `value`, `chart`, `gauge`, `switch`, `status`, `number`, `button`, `consumption`. Device: `card`. Several types comma separated, e.g. `switch,button`, give one widget each. Empty = not shown                                                         |
 | `dashboard.nickname` | Display name. Empty = `meta.name`                                                                                                                                                                                                               |
 | `dashboard.color`    | Any CSS colour, e.g. `#0f766e`                                                                                                                                                                                                                  |
-| `dashboard.icon`     | Icon name: `bolt`, `thermometer`, `droplet`, `power`, `lightbulb`, `gauge`, `door`, `lift`, `wind`, `home`, `chart`, `alert`, `sun`, `fan`, `lock`, `signal`, `battery`, `device`, `bell`, `link`. Empty = IoT Open's standard `icon` key if it is one of these |
+| `dashboard.icon`     | Icon name: `bolt`, `thermometer`, `droplet`, `power`, `lightbulb`, `gauge`, `door`, `lift`, `wind`, `home`, `chart`, `alert`, `sun`, `fan`, `lock`, `signal`, `battery`, `device`, `bell`, `link`, `map`. Empty = IoT Open's standard `icon` key if it is one of these |
 | `dashboard.timeline` | Name of a timeline. All functions with the same name become rows in one timeline widget                                                                                                                                                         |
 | `dashboard.chart`    | Name of a multi-series graph. All functions with the same name are drawn as lines in one graph                                                                                                                                                  |
+| `dashboard.tracker`  | Name of a map (*Tracker*). All functions with the same name are drawn on one map, one track per device                                                                                                                                         |
 | `dashboard.limits`   | Limits for status OK / Warning / Critical, e.g. `-w<18,>21 -c<16,>22` (see below)                                                                                                                                                               |
 | `dashboard.color_<x>` | Colour for the state `state_<x>`, e.g. `dashboard.color_armed = #dc2626`. Fills a *value* widget, colours the dot of a *status* widget                                                                                                         |
 | `dashboard.press`    | *button*: value sent to `topic_write` while the button is pressed. Empty = `1`                                                                                                                                                                  |
@@ -182,6 +185,8 @@ A function can have status 0 = OK, 1 = Warning or 2 = Critical – the same leve
 |------------------------------------------------|----------------------------------------------------------------------------------------------------|
 | `dashboard.status` (+ `dashboard.status_text`) | Set by something else, e.g. a server-side service or a person in Lynx. The dashboard only reads it |
 | `dashboard.limits`                             | Limits evaluated live against the latest value                                                     |
+- **consumption** (*Förbrukning*): bars per hour, day, week or month from a meter reading, e.g. litres of water per day for a week, kWh per day for a month or visitors per week for a year. The consumption of a period is the difference between the readings; a reading lower than the one before (a reset or replaced meter) counts from zero. With *Förbrukning per värde* the values are summed instead (for functions that report the amount since the last message). The data is aggregated by IoT Open (the last reading per hour, or per day for ranges over two months), so even years of readings are a few hundred values. The last bar is the current period, drawn lighter, and grows with live values. Settings in the layout file: `period` (`hour`, `day`, `week`, `month`), `count` and `mode` (`counter` or `delta`).
+- **Map (Tracker)**: the current position and a trail of earlier positions on a map, one track per device. A track is a function of type `latitude` plus one of type `longitude` on the same device, or one function whose type contains `geohash`. Latitude and longitude often arrive as two messages a second or two apart, so a position is only drawn when both values have arrived within *Wait for the sibling value* (*Vänta på syskonvärdet*, `pair`, default 5 s); 0 pairs each value with the other's latest. The history is limited both by time (`hours`) and by the number of positions (`points`); the newest position is always shown. The trail is drawn as segments that fade with age (`fade`), so the newest end is obvious; it ends in a large dot. Drag to pan, double-click or +/- to zoom, *Visa allt* goes back to showing all positions and following new ones. Created with *Add widget → New map (Tracker)*; membership is `dashboard.tracker` on each function, settings under `k:<name>`. Map tiles come from `MAP_TILES`.
 
 Limit syntax: `-w` = warning, `-c` = critical, each followed by comma separated conditions; one matching condition is enough. Operators: `<`, `<=`, `>`, `>=`, `=`, `!=`. Critical wins over warning.
 
@@ -198,6 +203,8 @@ IoT Open publishes `<client_id>/evt/<type>/updated` (payload `{}`) whenever some
 | `evt/file/updated`                             | The layout file `dashboard-layout.json`                                                          |
 
 After a reconnect everything is read once.
+
+Live values normally arrive as JSON (`{"value": 1, "timestamp": …}`). A bare value, e.g. a lone `1` that some devices publish (often retained), is treated as `{"value": 1}`, the same way IoT Open itself does. A retained message without its own timestamp keeps the time the status API gave for that value, so the widget does not claim it just happened.
 
 ### Time ranges and zoom
 
@@ -236,7 +243,7 @@ Timelines always read raw data, since averaging on/off states would hide events.
 }
 ```
 
-Keys are `f:<function id>`, `d:<device id>`, `t:<timeline name>`, `c:<graph name>` or `u:<n>` (link button). With several types in `dashboard.widget` the first type uses `f:<id>` and the others `f:<id>:<type>`, e.g. `f:108:button`. `w` is the width in columns of 8 (1–8) and `h` the height in rows; `h = 0.5` (half a row) works for value, status, switch, button and link widgets. The grid has 8 columns on wide screens, 6 and 4 on smaller ones and 2 on phones, so `w = 1` puts two small widgets side by side on a phone. Files with `"version": 1` (4 columns) are converted automatically (widths doubled) and saved as version 2 the next time the layout changes.
+Keys are `f:<function id>`, `d:<device id>`, `t:<timeline name>`, `c:<graph name>`, `k:<map name>` or `u:<n>` (link button). With several types in `dashboard.widget` the first type uses `f:<id>` and the others `f:<id>:<type>`, e.g. `f:108:button`. `w` is the width in columns of 8 (1–8) and `h` the height in rows; `h = 0.5` (half a row) works for value, status, switch, button and link widgets. The grid has 8 columns on wide screens, 6 and 4 on smaller ones and 2 on phones, so `w = 1` puts two small widgets side by side on a phone. Files with `"version": 1` (4 columns) are converted automatically (widths doubled) and saved as version 2 the next time the layout changes.
 
 | Parameter    | Applies to                   | Meaning                                                                   |
 |--------------|------------------------------|---------------------------------------------------------------------------|
@@ -258,7 +265,7 @@ The dashboard only writes when an admin changes something in edit mode:
 |-------------------------------|----------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------|
 | Add or edit a widget          | `PUT …/functionx/{iid}/{id}/meta/dashboard.*` (or `devicex`) + `dashboard-layout.json`       | Remove the key in Lynx, or *Remove from dashboard* (*Ta bort från dashboarden*) |
 | Remove a widget               | `dashboard.widget` is deleted. Name, colour and icon stay                                    | Set `dashboard.widget` again                                                    |
-| Timeline / multi-series graph | `dashboard.timeline` / `dashboard.chart` on each selected function + `dashboard-layout.json` | *Remove timeline/graph*, or remove the keys in Lynx                             |
+| Timeline / multi-series graph / map | `dashboard.timeline` / `dashboard.chart` / `dashboard.tracker` on each selected function + `dashboard-layout.json` | *Remove timeline/graph*, or remove the keys in Lynx                             |
 | Visible checkbox              | `visible` = `"true"`/`"false"` on the function (never deleted)                               | Set the value back in Lynx or in the widget editor                              |
 | Limits                        | `dashboard.limits` on the function                                                           | Empty the field, or remove the key in Lynx                                      |
 | Status                        | `dashboard.status` (0/1/2) + `dashboard.status_text` on the function                         | Choose *Ingen* in the widget editor, or remove the keys in Lynx                 |
@@ -274,7 +281,7 @@ IoT Open rejects empty metadata values, so an empty field in the dashboard alway
 The keys the dashboard writes are:
 
 - on the installation: `dashboard.title`, `dashboard.admins` and `dashboard.color_*` (see the table above)
-- on functions and devices: `dashboard.widget`, `dashboard.nickname`, `dashboard.color`, `dashboard.icon`, `dashboard.timeline`, `dashboard.chart`, `dashboard.limits`, `dashboard.status`, `dashboard.status_text`, `dashboard.color_<x>`, `dashboard.press`, `dashboard.release`, and `visible` (plus `state_<x>`/`text_<x>` when states are edited)
+- on functions and devices: `dashboard.widget`, `dashboard.nickname`, `dashboard.color`, `dashboard.icon`, `dashboard.timeline`, `dashboard.chart`, `dashboard.tracker`, `dashboard.limits`, `dashboard.status`, `dashboard.status_text`, `dashboard.color_<x>`, `dashboard.press`, `dashboard.release`, and `visible` (plus `state_<x>`/`text_<x>` when states are edited)
 
 Other `dashboard.*` keys may come from older dashboards (e.g. `dashboard.in_graph`, `dashboard.menu_group`). They are not read and must not be removed when undoing changes made here.
 

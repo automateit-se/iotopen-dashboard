@@ -7,6 +7,7 @@ import { STATUS_META, STATUS_TEXT, parseLimits } from '../lib/status.js';
 import { FUNCTION_WIDGETS, DEVICE_WIDGETS, DEFAULT_LAYOUT, OBJ_META, WIDTH_OPTIONS, HALF_HEIGHT_TYPES, heightOptions, writeTopic, isHidden, stateColorKey, widgetTypes, WIDGET_LABEL } from '../lib/dashboard.js';
 import { stateMap } from '../lib/format.js';
 import { ColorPicker, SeriesColor } from './ColorPicker.jsx';
+import { PERIODS, MODES } from './widgets/Consumption.jsx';
 
 /** state_<key> name for a new row: from the text (a-z, 0-9, _), else the value; unique among the rows. */
 function newStateKey(row, rows) {
@@ -49,6 +50,9 @@ export function WidgetEditor({ kind, obj, widgetType, layoutEntry, isNew, onSave
   const [max, setMax] = useState(base.max ?? 100);
   const [hours, setHours] = useState(base.hours ?? 24);
   const [aggr, setAggr] = useState(base.aggr || 'avg');
+  const [period, setPeriod] = useState(base.period || 'day');
+  const [count, setCount] = useState(base.count ?? 7);
+  const [mode, setMode] = useState(base.mode || 'counter');
   const [limits, setLimits] = useState(m[STATUS_META.limits] || '');
   const limitsCheck = parseLimits(limits);
   // manual status: '' = none (key removed, limits decide), '0'/'1'/'2' = OK/Warning/Critical – can then be changed in IoT Open
@@ -85,6 +89,12 @@ export function WidgetEditor({ kind, obj, widgetType, layoutEntry, isNew, onSave
       const params = { w: Number(w), h: Number(h), color: several ? color.trim() : '' };
       if (type === 'gauge') Object.assign(params, { min: Number(min), max: Number(max) });
       if (type === 'chart') Object.assign(params, { hours: Number(hours), aggr });
+      if (type === 'consumption') {
+        const most = PERIODS.find(([p]) => p === period)[2];
+        const n = Math.round(Number(count));
+        if (!(n >= 1 && n <= most)) throw new Error(`Antal staplar: 1-${most} för vald period.`);
+        Object.assign(params, { period, count: n, mode });
+      }
       // states: only for value/status; rows removed in the editor delete their three keys
       let st = {};
       if (kind === 'function' && (type === 'value' || type === 'status')) {
@@ -311,6 +321,33 @@ export function WidgetEditor({ kind, obj, widgetType, layoutEntry, isNew, onSave
             ))}
           </select>
         </Field>
+      )}
+      {type === 'consumption' && (
+        <>
+          <div className="row gap">
+            <Field label="En stapel per">
+              <select value={period} onChange={(e) => setPeriod(e.target.value)}>
+                {PERIODS.map(([v, l]) => (
+                  <option key={v} value={v}>
+                    {l}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Antal staplar" help="T.ex. 7 dygn, 30 dygn, 52 veckor eller 12 månader. Den sista är pågående period.">
+              <input type="number" min="1" max={PERIODS.find(([p]) => p === period)?.[2]} value={count} onChange={(e) => setCount(e.target.value)} />
+            </Field>
+          </div>
+          <Field label="Funktionen visar" help="Mätarställning: skillnaden mellan avläsningarna blir förbrukningen (ett nollställt räkneverk hanteras). IoT Open sammanställer per timme eller dygn, så även lång historik går snabbt.">
+            <select value={mode} onChange={(e) => setMode(e.target.value)}>
+              {MODES.map(([v, l]) => (
+                <option key={v} value={v}>
+                  {l}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </>
       )}
       {(type === 'switch' || type === 'number' || type === 'button') && !writeTopic(obj) && <div className="warn-box">Funktionen saknar topic_write, så den kan inte styras härifrån.</div>}
       {error && <div className="error-box">{error}</div>}

@@ -26,6 +26,9 @@ const devices = [];
 const functions = [];
 const statuses = new Map(); // `${iid}|${topic}` -> entry
 const logs = [];
+// retained messages, sent (with the retain flag) right after a client subscribes - like a real broker.
+// Some devices publish a bare value ("1") instead of JSON; IoT Open treats it as { value: 1 }.
+const retained = new Map(); // full topic -> raw payload text
 const setStatus = (e) => statuses.set(`${e.installation_id}|${e.topic}`, e);
 
 function dev(iid, type, name, meta = {}) {
@@ -106,6 +109,20 @@ function signal(iid, topic, gen) {
   signal(iid, 'obj/zwave/30/door', () => (Math.random() < 0.15 ? 1 : 0));
   signal(iid, 'obj/vent/1/co2', (ts) => Math.round(550 + 250 * Math.max(0, Math.sin(ts / 9000)) + Math.random() * 40));
   signal(iid, 'obj/smhi/temp', (ts) => 8 + 4 * Math.sin(ts / 30000) + Math.random() * 0.4);
+  // edge client: online state published as a bare, retained "1" (no JSON, no timestamp)
+  const edge = dev(iid, 'edge_client', 'Edge Client');
+  fn(iid, edge, 'boolean_text', 'online', 'box/event/status', { state_true: '1', state_false: '0', text_true: 'up', text_false: 'down', 'dashboard.widget': 'status', 'dashboard.icon': 'bolt' });
+  setStatus({ client_id: 5001, installation_id: iid, topic: 'box/event/status', value: 1, msg: '', timestamp: now() - 7 * 3600 });
+  retained.set('5001/box/event/status', '1');
+  // tracker: a vehicle reporting latitude and longitude as two values up to 2 s apart, and a boat sending a geohash
+  const car = dev(iid, 'vehicle', 'Servicebil');
+  fn(iid, car, 'latitude', 'Servicebil latitud', 'obj/gps/1/lat', { format: '%.5f', 'dashboard.tracker': 'Fordon' });
+  fn(iid, car, 'longitude', 'Servicebil longitud', 'obj/gps/1/lon', { format: '%.5f', 'dashboard.tracker': 'Fordon' });
+  const boat = dev(iid, 'boat', 'Arbetsbåt');
+  fn(iid, boat, 'geohash', 'Arbetsbåt position', 'obj/gps/2/geohash', { 'dashboard.tracker': 'Fordon' });
+  // water meter: a counter in litres, logged every hour for more than a year
+  const water = dev(iid, 'water_meter', 'Vattenmätare');
+  fn(iid, water, 'water_meter', 'Vatten', 'obj/water/1/total', { format: '%.0f l', unit: 'l', 'dashboard.widget': 'consumption', 'dashboard.icon': 'droplet', 'dashboard.color': '#2563eb' });
   for (const [topic, v] of [['obj/zwave/12/setpoint', 21.5], ['obj/zwave/20/state', 0], ['obj/vent/1/state', 1]]) setStatus({ client_id: 5001, installation_id: iid, topic, value: v, msg: '', timestamp: now() - 600 });
 }
 // Lagret – nothing configured: shows the empty state and the "add widget" flow
@@ -140,6 +157,68 @@ for (const s of signals) {
     setStatus(e);
   }
 }
+// made-up routes: a loop for the vehicle, a slower loop on the water for the boat
+const carAt = (ts) => {
+  const t = (ts / 1800) * Math.PI;
+  return { lat: 59.3326 + 0.012 * Math.sin(t) + 0.003 * Math.sin(3 * t), lon: 18.0649 + 0.024 * Math.cos(t) };
+};
+const boatAt = (ts) => {
+  const t = (ts / 5400) * Math.PI;
+  return { lat: 59.318 + 0.006 * Math.sin(t), lon: 18.105 + 0.02 * Math.cos(t) };
+};
+const B32 = '0123456789bcdefghjkmnpqrstuvwxyz';
+function geohash(lat, lon, len = 9) {
+  const r = { lat: [-90, 90], lon: [-180, 180] };
+  let even = true, bit = 0, ch = 0, out = '';
+  while (out.length < len) {
+    const k = even ? 'lon' : 'lat';
+    const v = even ? lon : lat;
+    const mid = (r[k][0] + r[k][1]) / 2;
+    if (v >= mid) { ch = (ch << 1) | 1; r[k][0] = mid; } else { ch <<= 1; r[k][1] = mid; }
+    even = !even;
+    if (++bit === 5) { out += B32[ch]; bit = 0; ch = 0; }
+  }
+  return out;
+}
+const record = (iid, topic, ts, value, live) => {
+  const e = { client_id: clientOf(iid), installation_id: iid, timestamp: ts, topic, value, msg: '' };
+  logs.push(e);
+  setStatus(e);
+  if (live) mqttBroadcast(e);
+};
+// the vehicle: latitude first, longitude 0-2 s later (as some trackers do)
+const carFix = (ts, live) => {
+  const p = carAt(ts);
+  const lag = Math.round(Math.random() * 2);
+  record(1001, 'obj/gps/1/lat', ts, +p.lat.toFixed(6), live);
+  if (live) setTimeout(() => record(1001, 'obj/gps/1/lon', ts + lag, +p.lon.toFixed(6), true), lag * 1000);
+  else record(1001, 'obj/gps/1/lon', ts + lag, +p.lon.toFixed(6), false);
+};
+const boatFix = (ts, live) => {
+  const p = boatAt(ts);
+  record(1001, 'obj/gps/2/geohash', ts, geohash(p.lat, p.lon), live);
+};
+for (let ts = now() - 12 * 3600; ts <= now() - 30; ts += 30) carFix(ts, false);
+for (let ts = now() - 12 * 3600; ts <= now() - 120; ts += 120) boatFix(ts, false);
+// water: more at mornings and evenings, more at weekends
+let water = 184000;
+const waterPerHour = (ts) => {
+  const d = new Date(ts * 1000);
+  const h = d.getHours();
+  const base = h >= 6 && h <= 8 ? 40 : h >= 17 && h <= 21 ? 30 : h >= 23 || h <= 5 ? 1 : 8;
+  return base * ([0, 6].includes(d.getDay()) ? 1.4 : 1) * (0.6 + Math.random() * 0.8);
+};
+for (let ts = Math.floor((now() - 400 * 86400) / 3600) * 3600; ts <= now() - 60; ts += 3600) {
+  water += waterPerHour(ts);
+  record(1001, 'obj/water/1/total', ts, Math.round(water), false);
+}
+setInterval(() => {
+  carFix(now(), true);
+  boatFix(now(), true);
+  water += waterPerHour(now()) / 360 * 2;
+  record(1001, 'obj/water/1/total', now(), Math.round(water), true);
+}, 20000);
+
 // live values every 10 s
 setInterval(() => {
   for (const s of signals) {
@@ -349,6 +428,12 @@ function handleMqtt(c, type, body) {
     const rc = [];
     for (let o = 2; o < body.length;) { const l = (body[o] << 8) | body[o + 1]; c.topics.add(body.subarray(o + 2, o + 2 + l).toString()); o += 3 + l; rc.push(0); }
     wsSend(c.socket, [0x90, 2 + rc.length, body[0], body[1], ...rc]);
+    for (const [full, text] of retained) {
+      if (!c.topics.has(full)) continue;
+      const t = mstr(full);
+      const p = [...Buffer.from(text)];
+      wsSend(c.socket, [0x31, ...mlen(t.length + p.length), ...t, ...p]);
+    }
   } else if (type === 10) {
     for (let o = 2; o < body.length;) { const l = (body[o] << 8) | body[o + 1]; c.topics.delete(body.subarray(o + 2, o + 2 + l).toString()); o += 2 + l; }
     wsSend(c.socket, [0xb0, 2, body[0], body[1]]);

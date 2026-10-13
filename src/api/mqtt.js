@@ -81,13 +81,16 @@ export function createMqtt({ url, token, onMessage, onState, keepAlive = 60 }) {
       let off = 2 + tl;
       if ((flags >> 1) & 3) off += 2;
       const text = dec.decode(body.subarray(off));
+      // IoT Open's own messages are JSON objects ({ value, msg, timestamp }). A bare value - a lone number
+      // such as "1", or plain text - is treated by IoT Open as { value: <it> }, so it is here too.
       let payload;
       try {
         payload = JSON.parse(text);
       } catch {
-        payload = { value: Number(text), msg: '' };
+        payload = text.trim();
       }
-      onMessage?.(topic, payload);
+      if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) payload = { value: payload, msg: '' };
+      onMessage?.(topic, payload, { retained: !!(flags & 1) });
     }
   };
 

@@ -4,6 +4,8 @@ import { fnName, writeTopic, onOffTopics, rangeOf, isBinary, isHidden, stateColo
 import { Icon } from '../icons.jsx';
 import { TimelineWidget } from './Timeline.jsx';
 import { MultiChartWidget } from './MultiChart.jsx';
+import { TrackerWidget } from './Tracker.jsx';
+import { ConsumptionWidget } from './Consumption.jsx';
 import { statusOf, staleProps } from '../../lib/status.js';
 
 /** CSS class for a value's status (warning/critical colour), '' when OK or none. */
@@ -286,6 +288,8 @@ export function CardWidget({ w, ctx }) {
 export const WIDGET_COMPONENTS = {
   timeline: TimelineWidget,
   multichart: MultiChartWidget,
+  tracker: TrackerWidget,
+  consumption: ConsumptionWidget,
   value: ValueWidget,
   status: StatusWidget,
   switch: SwitchWidget,

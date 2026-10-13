@@ -19,7 +19,9 @@ ENV LYNX_URL=https://lynx.iotopen.se \
     BASE_PATH="" \
     LIVE_UPDATES=true \
     CUSTOM_SERVERS=true \
-    API_MODE=proxy
+    API_MODE=proxy \
+    MAP_TILES="https://tile.openstreetmap.org/{z}/{x}/{y}.png" \
+    MAP_ATTRIBUTION="© OpenStreetMap-bidragsgivare"
 COPY nginx/default.conf.template /etc/nginx/templates/default.conf.template
 COPY nginx/snippets/ /etc/nginx/snippets/
 # runs before the template is rendered; the container refuses to start on a suspicious LYNX_URL

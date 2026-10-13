@@ -9,6 +9,9 @@ export const appUrl = (path) => BASE_URL + String(path).replace(/^\//, '');
 export const config = {
   appTitle: 'Dashboard',
   liveUpdates: true,
+  // map tiles for the Tracker widget ({z}/{x}/{y} template); '' = no map background, only the tracks
+  mapTiles: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+  mapAttribution: '© OpenStreetMap-bidragsgivare',
 };
 
 export async function loadConfig() {
@@ -17,6 +20,8 @@ export async function loadConfig() {
     if (res.ok) {
       const c = await res.json();
       for (const [k, v] of Object.entries(c)) if (v !== '' && v !== undefined && v !== null) config[k] = v;
+      // an empty MAP_TILES turns the map background off (the CSP then allows no tile server either)
+      if (c.mapTiles === '') config.mapTiles = '';
     }
   } catch {
     /* keep defaults */

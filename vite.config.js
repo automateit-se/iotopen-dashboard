@@ -24,7 +24,7 @@ export default defineConfig({
         server.middlewares.use('/config.json', (req, res) => {
           res.setHeader('Content-Type', 'application/json');
           res.setHeader('Cache-Control', 'no-store');
-          res.end(JSON.stringify({ liveUpdates: 'true', lynxServer: target, customServers: 'true' }));
+          res.end(JSON.stringify({ liveUpdates: 'true', lynxServer: target, customServers: 'true', ...(process.env.MAP_TILES !== undefined ? { mapTiles: process.env.MAP_TILES } : {}) }));
         });
       },
     },

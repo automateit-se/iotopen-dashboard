@@ -146,7 +146,7 @@ export function useInstallation(iid) {
   };
 
   const onMessage = useCallback(
-    (fullTopic, payload) => {
+    (fullTopic, payload, { retained = false } = {}) => {
       const m = /^(\d+)\/(.*)$/.exec(fullTopic);
       if (!m || String(instRef.current?.client_id) !== m[1]) return;
       if (STRUCTURE_EVENTS.includes(m[2])) return debounce('structure', () => load({ withLayout: false, quiet: true }));
@@ -156,7 +156,9 @@ export function useInstallation(iid) {
         topic: m[2],
         value: payload?.value,
         msg: payload?.msg || '',
-        timestamp: Number(payload?.timestamp) || Date.now() / 1000,
+        // a retained message without its own time (e.g. a bare "1") is not new: keep the time the status API
+        // gave for the topic, so the widget does not claim it just happened
+        timestamp: Number(payload?.timestamp) || (retained && byTopic.current.get(m[2])?.timestamp) || Date.now() / 1000,
       };
       byTopic.current.set(m[2], entry);
       listeners.current.forEach((fn) => fn(entry));

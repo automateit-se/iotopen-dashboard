@@ -26,7 +26,7 @@ export const safeColor = (v) => {
 };
 
 // icon names the dashboard can draw (components/icons.jsx); IoT Open's meta "icon" is used when it matches
-const ICON_SET = new Set(['bolt', 'thermometer', 'droplet', 'power', 'lightbulb', 'gauge', 'door', 'lift', 'wind', 'home', 'chart', 'alert', 'sun', 'fan', 'lock', 'signal', 'battery', 'device', 'bell', 'link']);
+const ICON_SET = new Set(['bolt', 'thermometer', 'droplet', 'power', 'lightbulb', 'gauge', 'door', 'lift', 'wind', 'home', 'chart', 'alert', 'sun', 'fan', 'lock', 'signal', 'battery', 'device', 'bell', 'link', 'map']);
 
 export const INST_META = {
   title: 'dashboard.title',
@@ -41,6 +41,7 @@ export const OBJ_META = {
   // group widgets: functions with the same name form one widget
   timeline: 'dashboard.timeline', // discrete functions as state bars
   chart: 'dashboard.chart', // analog functions as lines in one graph
+  tracker: 'dashboard.tracker', // latitude/longitude or geohash functions as positions on a map
   // push button: value sent while pressed, and (optional) when released
   press: 'dashboard.press',
   release: 'dashboard.release',
@@ -61,6 +62,7 @@ export function stateColor(fn, value) {
 export const GROUPS = {
   timeline: { metaKey: 'dashboard.timeline', prefix: 't', type: 'timeline', icon: 'chart', label: 'tidslinje' },
   chart: { metaKey: 'dashboard.chart', prefix: 'c', type: 'multichart', icon: 'chart', label: 'graf' },
+  tracker: { metaKey: 'dashboard.tracker', prefix: 'k', type: 'tracker', icon: 'map', label: 'karta' },
 };
 
 // ---- discrete functions (timeline) --------------------------------------------------------------
@@ -123,10 +125,11 @@ export const FUNCTION_WIDGETS = [
   { id: 'switch', label: 'Brytare', help: 'Skickar state_on/state_off till topic_write (eller topic_write_onoff) via MQTT.' },
   { id: 'status', label: 'Status', help: 'Av/på-indikator med text_on/text_off.' },
   { id: 'number', label: 'Börvärde / nivå', help: 'Skickar ett tal till topic_write via MQTT. Med min/max i meta blir det ett reglage (t.ex. dimmer).' },
+  { id: 'consumption', label: 'Förbrukning', help: 'Staplar per timme, dygn, vecka eller månad från en mätarställning (el, vatten, besökare…). Använder sammanställd data från IoT Open.' },
   { id: 'button', label: 'Tryckknapp', help: 'Fjädrande knapp, t.ex. dörrklocka: skickar ett värde när den trycks ned och (valfritt) ett när den släpps.' },
 ];
 export const DEVICE_WIDGETS = [{ id: 'card', label: 'Enhetskort', help: 'Alla funktioner som hör till enheten i ett kort.' }];
-export const WIDGET_LABEL = { ...Object.fromEntries([...FUNCTION_WIDGETS, ...DEVICE_WIDGETS].map((w) => [w.id, w.label])), timeline: 'Tidslinje', multichart: 'Graf (flera)', www: 'Länkknapp (www)' };
+export const WIDGET_LABEL = { ...Object.fromEntries([...FUNCTION_WIDGETS, ...DEVICE_WIDGETS].map((w) => [w.id, w.label])), timeline: 'Tidslinje', multichart: 'Graf (flera)', tracker: 'Karta (Tracker)', www: 'Länkknapp (www)' };
 
 /** Widget types that can be half a row high, e.g. a banner across the top of the dashboard. */
 export const HALF_HEIGHT_TYPES = ['value', 'status', 'switch', 'button', 'www'];
@@ -142,6 +145,7 @@ export function fitsType(type, kind, obj) {
   if (type === 'switch') return !!writeTopic(obj) && isBinary(obj);
   if (type === 'number' || type === 'button') return !!writeTopic(obj);
   if (type === 'status') return isDiscrete(obj);
+  if (type === 'consumption') return !isDiscrete(obj);
   return true;
 }
 
@@ -162,6 +166,8 @@ export const DEFAULT_LAYOUT = {
   card: { w: 4, h: 2 },
   timeline: { w: 8, h: 2, hours: 24 },
   multichart: { w: 4, h: 2, hours: 24 },
+  tracker: { w: 4, h: 3, hours: 24, points: 200, pair: 5, fade: true },
+  consumption: { w: 4, h: 2, period: 'day', count: 7, mode: 'counter' },
 };
 
 /** Series colours for multi-line graphs: profile colours first, then distinct hues. */

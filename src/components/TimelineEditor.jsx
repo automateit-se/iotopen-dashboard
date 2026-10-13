@@ -4,6 +4,7 @@ import { DEFAULT_LAYOUT, GROUPS, OBJ_META, SERIES_COLORS, WIDTH_OPTIONS, fnName,
 import { ColorPicker, SeriesColor } from './ColorPicker.jsx';
 import { RANGE_OPTIONS } from './widgets/RangePicker.jsx';
 import { AGGR_METHODS } from '../lib/history.js';
+import { isGeo, geoRole } from '../lib/geo.js';
 
 const TEXT = {
   timeline: {
@@ -24,6 +25,15 @@ const TEXT = {
     none: 'Inga analoga funktioner hittades.',
     remove: 'Ta bort grafen',
   },
+  tracker: {
+    newTitle: 'Ny karta (Tracker)',
+    editTitle: 'Redigera karta',
+    defaultName: 'Positioner',
+    intro: 'Visar nuvarande position och ett spår av tidigare positioner. Välj per enhet en funktion av typen latitude och en av typen longitude, eller en geohash. Funktioner på samma enhet blir ett spår.',
+    showOther: 'Visa alla funktioner',
+    none: 'Inga funktioner av typen latitude, longitude eller geohash hittades.',
+    remove: 'Ta bort kartan',
+  },
 };
 
 /**
@@ -33,7 +43,7 @@ const TEXT = {
 export function TimelineEditor({ group = 'timeline', raw, name: oldName, layoutEntry, existingNames, onSave, onRemove, onClose }) {
   const g = GROUPS[group];
   const tx = TEXT[group];
-  const matches = (f) => (group === 'timeline' ? isDiscrete(f) : !isDiscrete(f));
+  const matches = (f) => (group === 'tracker' ? isGeo(f) : group === 'timeline' ? isDiscrete(f) : !isDiscrete(f));
   const isNew = !oldName;
   const [name, setName] = useState(oldName || tx.defaultName);
   const base = { ...DEFAULT_LAYOUT[g.type], ...(layoutEntry || {}) };
@@ -45,6 +55,9 @@ export function TimelineEditor({ group = 'timeline', raw, name: oldName, layoutE
   const [series, setSeries] = useState(() => ({ ...(base.series || {}) }));
   const [minWidth, setMinWidth] = useState(base.min_width ?? 1);
   const [aggr, setAggr] = useState(base.aggr || 'avg');
+  const [points, setPoints] = useState(base.points ?? 200);
+  const [pair, setPair] = useState(base.pair ?? 5);
+  const [fade, setFade] = useState(base.fade !== false);
   const [showAll, setShowAll] = useState(false);
   const [showHidden, setShowHidden] = useState(false);
   const [q, setQ] = useState('');
@@ -66,7 +79,9 @@ export function TimelineEditor({ group = 'timeline', raw, name: oldName, layoutE
   const themeWidget = useMemo(() => getComputedStyle(document.documentElement).getPropertyValue('--data').trim() || '#0d3e53', []);
   const order = raw.functions.filter((f) => selected.has(f.id) && !isHidden(f)).map((f) => f.id);
   const fallbackOf = (f) =>
-    group === 'timeline'
+    group === 'tracker'
+      ? SERIES_COLORS[Math.max(0, order.filter((id) => ['lat', 'geohash'].includes(geoRole(raw.functions.find((x) => x.id === id)))).indexOf(f.id)) % SERIES_COLORS.length]
+      : group === 'timeline'
       ? safeColor(color) || themeWidget
       : safeColor(f.meta?.[OBJ_META.color]) || SERIES_COLORS[Math.max(0, order.indexOf(f.id)) % SERIES_COLORS.length];
 
@@ -88,7 +103,7 @@ export function TimelineEditor({ group = 'timeline', raw, name: oldName, layoutE
       const bad = [color, ...Object.values(series)].find((c) => c && !safeColor(c));
       if (bad) throw new Error(`"${bad}" är ingen giltig CSS-färg.`);
       const own = Object.fromEntries(Object.entries(series).filter(([id, c]) => c && selected.has(Number(id))));
-      await onSave(clean, [...selected], { hours: Number(hours), w: Number(w), h: Number(h), ...(group === 'timeline' ? { min_width: Math.max(0, Number(minWidth) || 0) } : { aggr }), ...(color ? { color } : {}), series: own });
+      await onSave(clean, [...selected], { hours: Number(hours), w: Number(w), h: Number(h), ...(group === 'timeline' ? { min_width: Math.max(0, Number(minWidth) || 0) } : group === 'tracker' ? { points: Math.max(1, Math.round(Number(points)) || 200), pair: Math.max(0, Number(pair) || 0), fade } : { aggr }), ...(color ? { color } : {}), series: own });
     } catch (e) {
       setError(errText(e));
       setBusy(false);
@@ -153,10 +168,28 @@ export function TimelineEditor({ group = 'timeline', raw, name: oldName, layoutE
           </select>
         </Field>
       </div>
+      {group === 'tracker' && (
+        <>
+          <div className="row gap">
+            <Field label="Max antal positioner" help="Det nyaste spåret visas, inom historiken ovan.">
+              <input type="number" min="1" max="5000" step="1" value={points} onChange={(e) => setPoints(e.target.value)} />
+            </Field>
+            <Field label="Vänta på syskonvärdet (s)" help="Latitud och longitud som kommer in inom så här många sekunder blir en position. 0 = para alltid med det senaste.">
+              <input type="number" min="0" max="600" step="1" value={pair} onChange={(e) => setPair(e.target.value)} />
+            </Field>
+          </div>
+          <label className="check visible-check">
+            <input type="checkbox" checked={fade} onChange={(e) => setFade(e.target.checked)} />
+            <span>Tona ut äldre delar av spåret</span>
+          </label>
+        </>
+      )}
       <Field
         label="Färg"
         help={
-          group === 'timeline'
+          group === 'tracker'
+            ? 'Färg på widgetens kant och ikon. Varje spår får en egen färg automatiskt, eller en egen färg i listan nedan.'
+            : group === 'timeline'
             ? 'Färg på alla rader i tidslinjen. Tomt = temats widgetfärg. En enskild rad kan få egen färg i listan nedan.'
             : 'Färg på widgetens kant och ikon. Linjerna får var sin färg automatiskt, eller en egen färg i listan nedan.'
         }
@@ -193,7 +226,7 @@ export function TimelineEditor({ group = 'timeline', raw, name: oldName, layoutE
       <ul className="check-list">
         {list.map((f) => (
           <li key={f.id} className="row gap">
-            {selected.has(f.id) && (
+            {selected.has(f.id) && (group !== 'tracker' || ['lat', 'geohash'].includes(geoRole(f))) && (
               <SeriesColor value={series[f.id] || ''} fallback={fallbackOf(f)} label={fnName(f)} onChange={(c) => setSeries((s) => ({ ...s, [f.id]: c }))} />
             )}
             <label className="check grow">
