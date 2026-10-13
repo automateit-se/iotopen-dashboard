@@ -90,6 +90,8 @@ input:focus, select:focus, button:focus-visible { outline: 2px solid var(--accen
 .small { font-size: 12.5px; }
 .row { display: flex; align-items: center; }
 .row.between { justify-content: space-between; }
+/* fields side by side line up at the top, also when only one of them has a help text */
+.row:has(> .field) { align-items: flex-start; }
 .wrap { flex-wrap: wrap; }
 .gap { gap: 8px; }
 .grow { flex: 1; }
