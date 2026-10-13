@@ -284,7 +284,7 @@ IoT Open rejects empty metadata values, so an empty field in the dashboard alway
 The keys the dashboard writes are:
 
 - on the installation: `dashboard.title`, `dashboard.admins` and `dashboard.color_*` (see the table above)
-- on functions and devices: `dashboard.widget`, `dashboard.nickname`, `dashboard.color`, `dashboard.icon`, `dashboard.timeline`, `dashboard.chart`, `dashboard.tracker`, `dashboard.limits`, `dashboard.status`, `dashboard.status_text`, `dashboard.color_<x>`, `dashboard.press`, `dashboard.release`, and `visible` (plus `state_<x>`/`text_<x>` when states are edited)
+- on functions and devices: `dashboard.widget`, `dashboard.nickname`, `dashboard.color`, `dashboard.icon`, `dashboard.timeline`, `dashboard.chart`, `dashboard.tracker`, `dashboard.limits`, `dashboard.status`, `dashboard.status_text`, `dashboard.color_<x>`, `dashboard.press`, `dashboard.release`, `dashboard.press_msg`, `dashboard.release_msg`, `dashboard.on_msg`, `dashboard.off_msg`, `dashboard.topic`, and `visible` (plus `state_<x>`/`text_<x>` when states are edited)
 
 Other `dashboard.*` keys may come from older dashboards (e.g. `dashboard.in_graph`, `dashboard.menu_group`). They are not read and must not be removed when undoing changes made here.
 
