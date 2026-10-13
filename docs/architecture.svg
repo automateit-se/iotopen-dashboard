@@ -19,9 +19,9 @@
     <text x="44" y="155">Installations · Dashboard</text>
     <rect x="34" y="170" width="242" height="72" rx="7" fill="#edf6fa"/>
     <text x="44" y="188" font-weight="600">Widgets and editors</text>
-    <text x="44" y="204">value, status, switch, set point,</text>
-    <text x="44" y="219">gauge, chart, card, timeline,</text>
-    <text x="44" y="234">multi-series graph, settings</text>
+    <text x="44" y="204" font-size="10.5">value, status, switch, set point, button,</text>
+    <text x="44" y="219" font-size="10.5">gauge, chart, consumption, card, link,</text>
+    <text x="44" y="234" font-size="10.5">timeline, multi-series graph, map, settings</text>
     <rect x="34" y="248" width="242" height="74" rx="7" fill="#edf6fa"/>
     <text x="44" y="266" font-weight="600">Logic</text>
     <text x="44" y="282">metadata schema · status / limits</text>
