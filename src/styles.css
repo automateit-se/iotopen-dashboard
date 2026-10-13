@@ -355,6 +355,7 @@ li.stale .val, .tl-label.stale .tl-now { opacity: 0.45; }
 .seg { display: flex; flex-wrap: wrap; gap: 6px; }
 .seg button { font: inherit; font-size: 14px; padding: 6px 12px; border-radius: 99px; border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; }
 .seg button.on { background: var(--brand-primary); border-color: var(--brand-primary); color: #fff; }
+.seg button:disabled { opacity: 0.4; cursor: not-allowed; text-decoration: line-through; }
 .swatch { width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--border); cursor: pointer; color: var(--muted); font-size: 12px; }
 .swatch.on { outline: 2px solid var(--text); outline-offset: 2px; }
 .color-text { width: 170px; }
@@ -407,6 +408,7 @@ input[aria-invalid='true'] { border-color: var(--danger); }
 .dev-list li.open > .dev-head .chev { transform: rotate(-90deg); }
 .dev-list .pick-list { margin: 4px 0 6px 18px; }
 .link-btn.small { font-size: 12.5px; }
+.used { color: var(--accent); }
 
 /* ---- half-height tiles (h = 0.5), e.g. a banner: name and value on one line ---- */
 .tile.half { flex-direction: row; align-items: center; gap: 12px; padding: 6px 14px; }

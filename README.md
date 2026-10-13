@@ -141,7 +141,7 @@ A function or device appears on the dashboard when it has `dashboard.widget`. Ev
 
 | Key                  | Values                                                                                                                                                                                                                                          |
 |----------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `dashboard.widget`   | Function: `value`, `chart`, `gauge`, `switch`, `status`, `number`, `button`. Device: `card`. Empty = not shown                                                                                                                                  |
+| `dashboard.widget`   | Function: `value`, `chart`, `gauge`, `switch`, `status`, `number`, `button`. Device: `card`. Several types comma separated, e.g. `switch,button`, give one widget each. Empty = not shown                                                         |
 | `dashboard.nickname` | Display name. Empty = `meta.name`                                                                                                                                                                                                               |
 | `dashboard.color`    | Any CSS colour, e.g. `#0f766e`                                                                                                                                                                                                                  |
 | `dashboard.icon`     | Icon name: `bolt`, `thermometer`, `droplet`, `power`, `lightbulb`, `gauge`, `door`, `lift`, `wind`, `home`, `chart`, `alert`, `sun`, `fan`, `lock`, `signal`, `battery`, `device`, `bell`, `link`. Empty = IoT Open's standard `icon` key if it is one of these |
@@ -154,7 +154,9 @@ A function or device appears on the dashboard when it has `dashboard.widget`. Ev
 
 The dashboard also reads IoT Open's standard function metadata ([meta keys](https://lynx.iotopen.se/tech/docs/platform/devxfuncx/meta-keys.html)): `name`, `format`, `unit`, `icon`, `visible`, `topic_read`, `topic_write`, `topic_read_onoff`, `topic_write_onoff`, `min`, `max`, and the `state_<x>` / `text_<x>` pairs (`on`/`off`, `open`/`closed`, `true`/`false`, `movement`/`nomovement` …).
 
-*Add widget* (*Lägg till widget*) lists what is not on the dashboard yet, grouped per device: click a device to open it and pick one of its functions, or the whole device as a card. Search shows only the devices with a matching function (or a matching name). The miniatures of the widget types narrow the list to what fits, e.g. *Brytare* shows only functions with `topic_write` and on/off states.
+**Several widgets per function.** `dashboard.widget = switch,button` shows the same function as both a switch and a push button. Name, icon, limits and states are shared; size, order and colour are per widget. With several widgets the colour is stored per widget in the layout file, and `dashboard.color` is the fallback. Removing one widget takes its type out of the list.
+
+*Add widget* (*Lägg till widget*) lists all functions and the devices without a card, grouped per device; a function that already has widgets is marked with its types and can get another one: click a device to open it and pick one of its functions, or the whole device as a card. Search shows only the devices with a matching function (or a matching name). The miniatures of the widget types narrow the list to what fits, e.g. *Brytare* shows only functions with `topic_write` and on/off states.
 
 **IoT Open is the master.** An object with `visible = "0"` or `"false"` is hidden everywhere in the dashboard: widgets, card rows, timelines, graphs and the *Add widget* lists. In edit mode hidden widgets stay visible, dimmed and marked *Hidden* (*Dold*). A missing `visible` means visible.
 
@@ -234,7 +236,7 @@ Timelines always read raw data, since averaging on/off states would hide events.
 }
 ```
 
-Keys are `f:<function id>`, `d:<device id>`, `t:<timeline name>`, `c:<graph name>` or `u:<n>` (link button). `w` is the width in columns of 8 (1–8) and `h` the height in rows; `h = 0.5` (half a row) works for value, status, switch, button and link widgets. The grid has 8 columns on wide screens, 6 and 4 on smaller ones and 2 on phones, so `w = 1` puts two small widgets side by side on a phone. Files with `"version": 1` (4 columns) are converted automatically (widths doubled) and saved as version 2 the next time the layout changes.
+Keys are `f:<function id>`, `d:<device id>`, `t:<timeline name>`, `c:<graph name>` or `u:<n>` (link button). With several types in `dashboard.widget` the first type uses `f:<id>` and the others `f:<id>:<type>`, e.g. `f:108:button`. `w` is the width in columns of 8 (1–8) and `h` the height in rows; `h = 0.5` (half a row) works for value, status, switch, button and link widgets. The grid has 8 columns on wide screens, 6 and 4 on smaller ones and 2 on phones, so `w = 1` puts two small widgets side by side on a phone. Files with `"version": 1` (4 columns) are converted automatically (widths doubled) and saved as version 2 the next time the layout changes.
 
 | Parameter    | Applies to                   | Meaning                                                                   |
 |--------------|------------------------------|---------------------------------------------------------------------------|
@@ -242,7 +244,7 @@ Keys are `f:<function id>`, `d:<device id>`, `t:<timeline name>`, `c:<graph name
 | `aggr`       | graph                        | Aggregation for long ranges: `avg`, `median`, `min`, `max`, `last`, `sum` |
 | `min_width`  | timeline                     | Minimum event width in percent                                            |
 | `min`, `max` | gauge                        | Scale limits                                                              |
-| `color`      | timeline, multi-series graph | Colour for the whole widget                                               |
+| `color`      | timeline, multi-series graph, link button, functions with several widgets | Colour for the whole widget          |
 | `series`     | timeline, multi-series graph | Own colour per row/line: `{ "<function id>": "<colour>" }`                |
 | `url`, `label`, `newTab`, `icon` | link button | Address (http/https), button text (empty = the domain), open in a new tab, icon |
 
