@@ -269,7 +269,7 @@ li.stale .val, .tl-label.stale .tl-now { opacity: 0.45; }
 .media-ctl { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .media-btn { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 50%; border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; padding: 0; }
 .media-btn:hover:not(:disabled) { border-color: var(--tile-color, var(--data)); }
-.media-btn.on { color: var(--tile-color, var(--data)); border-color: var(--tile-color, var(--data)); }
+.media-btn.on { background: var(--tile-color, var(--data)); border-color: transparent; color: var(--surface); }
 .media-btn.primary { width: 44px; height: 44px; background: var(--tile-color, var(--data)); border-color: transparent; color: var(--surface); }
 .media-btn:disabled { opacity: 0.45; cursor: default; }
 .media-vol { display: flex; align-items: center; gap: 8px; min-width: 120px; }
