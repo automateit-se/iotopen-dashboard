@@ -6,6 +6,7 @@ import { TimelineWidget } from './Timeline.jsx';
 import { MultiChartWidget } from './MultiChart.jsx';
 import { TrackerWidget } from './Tracker.jsx';
 import { ConsumptionWidget } from './Consumption.jsx';
+import { MediaWidget } from './Media.jsx';
 import { statusOf, staleProps } from '../../lib/status.js';
 
 /** CSS class for a value's status (warning/critical colour), '' when OK or none. */
@@ -303,4 +304,5 @@ export const WIDGET_COMPONENTS = {
   gauge: GaugeWidget,
   chart: ChartWidget,
   card: CardWidget,
+  media: MediaWidget,
 };

@@ -30,6 +30,9 @@ const logs = [];
 // Some devices publish a bare value ("1") instead of JSON; IoT Open treats it as { value: 1 }.
 const retained = new Map(); // full topic -> raw payload text
 const setStatus = (e) => statuses.set(`${e.installation_id}|${e.topic}`, e);
+// simulated media players: base topic -> { iid, client, track }; invented track names
+const media = new Map();
+const TRACKS = ['Exempelbandet – Första låten', 'Testkören – Sång om ingenting', 'Demoduon – Långsam vals', 'Påhittad artist – Ett längre låtnamn som inte får plats på en rad i widgeten'];
 
 function dev(iid, type, name, meta = {}) {
   const d = { id: nextId++, installation_id: iid, type, created: now(), updated: now(), meta: { name, ...meta }, protected_meta: {} };
@@ -130,6 +133,25 @@ function signal(iid, topic, gen) {
   // water meter: a counter in litres, logged every hour for more than a year
   const water = dev(iid, 'water_meter', 'Vattenmätare');
   fn(iid, water, 'water_meter', 'Vatten', 'obj/water/1/total', { format: '%.0f l', unit: 'l', 'dashboard.widget': 'consumption', 'dashboard.icon': 'droplet', 'dashboard.color': '#2563eb' });
+  // media players mirrored from Home Assistant: one device, one function per feature (playing, volume, mute, state, power)
+  const sonos = dev(iid, 'media_player', 'Sonos Vardagsrum', { 'dashboard.widget': 'media' });
+  const mp = 'obj/ha/media_player/vardagsrum';
+  fn(iid, sonos, 'switch', 'Sonos Vardagsrum Uppspelning', `${mp}/playing`, { topic_write: `set/${mp}/playing`, state_on: '1', state_off: '0' });
+  fn(iid, sonos, 'dimmer', 'Sonos Vardagsrum Volym', `${mp}/volume`, { topic_write: `set/${mp}/volume`, min: '0', max: '100', unit: '%' });
+  fn(iid, sonos, 'switch', 'Sonos Vardagsrum Mute', `${mp}/mute`, { topic_write: `set/${mp}/mute`, state_on: '1', state_off: '0' });
+  fn(iid, sonos, 'text', 'Sonos Vardagsrum Status', `${mp}/state`);
+  fn(iid, sonos, 'switch', 'Sonos Vardagsrum På/av', `${mp}/power`, { topic_write: `set/${mp}/power`, state_on: '1', state_off: '0' });
+  media.set(mp, { iid, client: 5001, track: 0 });
+  // a simpler player without mute and power support
+  const radio = dev(iid, 'media_player', 'Radio kök');
+  const rp = 'obj/ha/media_player/kok';
+  fn(iid, radio, 'switch', 'Radio kök Uppspelning', `${rp}/playing`, { topic_write: `set/${rp}/playing`, state_on: '1', state_off: '0' });
+  fn(iid, radio, 'dimmer', 'Radio kök Volym', `${rp}/volume`, { topic_write: `set/${rp}/volume`, min: '0', max: '100', unit: '%' });
+  fn(iid, radio, 'text', 'Radio kök Status', `${rp}/state`);
+  for (const [topic, value, msg] of [
+    [`${mp}/playing`, 1, TRACKS[0]], [`${mp}/volume`, 35, ''], [`${mp}/mute`, 0, ''], [`${mp}/state`, 'playing', ''], [`${mp}/power`, 1, ''],
+    [`${rp}/playing`, 0, 'P1 – Morgonpasset'], [`${rp}/volume`, 20, ''], [`${rp}/state`, 'paused', ''],
+  ]) setStatus({ client_id: 5001, installation_id: iid, topic, value, msg, timestamp: now() - 120 });
   for (const [topic, v] of [['obj/zwave/12/setpoint', 21.5], ['obj/zwave/20/state', 0], ['obj/vent/1/state', 1]]) setStatus({ client_id: 5001, installation_id: iid, topic, value: v, msg: '', timestamp: now() - 600 });
 }
 // Lagret – nothing configured: shows the empty state and the "add widget" flow
@@ -415,6 +437,39 @@ function wsSend(socket, bytes) {
 }
 const mstr = (s) => { const b = Buffer.from(s); return [b.length >> 8, b.length & 255, ...b]; };
 const mlen = (n) => { const o = []; do { let d = n % 128; n = Math.floor(n / 128); if (n > 0) d |= 128; o.push(d); } while (n > 0); return o; };
+/** A media player answers like the Home Assistant bridge: playing keeps the track in msg, state follows. */
+function mediaWrite(inst, f, pl) {
+  const m = /^(.*)\/(playing|volume|mute|power)$/.exec(f.meta.topic_read);
+  const p = m && media.get(m[1]);
+  if (!p) return false;
+  const send = (part, value, msg = '') => {
+    const e = { client_id: inst.client_id, installation_id: inst.id, topic: `${m[1]}/${part}`, value, msg, timestamp: now() };
+    logs.push(e); setStatus(e); mqttBroadcast(e);
+  };
+  const v = Number(pl.value);
+  setTimeout(() => {
+    if (m[2] === 'playing') {
+      send('playing', v ? 1 : 0, TRACKS[p.track]);
+      send('state', v ? 'playing' : 'paused');
+    } else if (m[2] === 'power') {
+      send('power', v ? 1 : 0);
+      send('playing', 0, '');
+      send('state', v ? 'idle' : 'off');
+    } else send(m[2], v);
+  }, 400);
+  return true;
+}
+// a new track every two minutes while playing: same value, new msg
+setInterval(() => {
+  for (const [base, p] of media) {
+    const st = statuses.get(`${p.iid}|${base}/playing`);
+    if (!st || !st.value) continue;
+    p.track = (p.track + 1) % TRACKS.length;
+    const e = { ...st, msg: TRACKS[p.track], timestamp: now() };
+    logs.push(e); setStatus(e); mqttBroadcast(e);
+  }
+}, 120000);
+
 function mqttBroadcast(e) {
   mqttPublish(`${e.client_id}/${e.topic}`, { value: e.value, timestamp: e.timestamp, msg: e.msg });
 }
@@ -456,6 +511,7 @@ function handleMqtt(c, type, body) {
     console.log(`[mqtt publish] ${full} ${JSON.stringify(pl)}`);
     const f = functions.find((x) => x.installation_id === inst.id && (x.meta.topic_write === mm[2] || x.meta.topic_write_onoff === mm[2]));
     if (!f) return;
+    if (mediaWrite(inst, f, pl)) return;
     setTimeout(() => {
       const topic = f.meta.topic_write_onoff === mm[2] ? f.meta.topic_read_onoff : f.meta.topic_read;
       const e = { client_id: inst.client_id, installation_id: inst.id, topic, value: pl.value, msg: '', timestamp: now() };

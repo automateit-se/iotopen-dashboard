@@ -54,6 +54,16 @@ const DRAW = {
       <rect x="56" y="27" width="6" height="6" rx="1" className="th-off" />
     </>
   ),
+  media: (
+    <>
+      <rect x="8" y="7" width="12" height="12" rx="2" className="th-off" />
+      <rect x="24" y="8" width="30" height="4" rx="2" className="th-fill" />
+      <rect x="24" y="15" width="20" height="3" rx="1.5" className="th-off" />
+      <path d="M10 25v9l7-4.5z" className="th-fill" />
+      <rect x="24" y="28.5" width="32" height="3" rx="1.5" className="th-off" />
+      <rect x="24" y="28.5" width="18" height="3" rx="1.5" className="th-fill" />
+    </>
+  ),
   card: (
     <>
       {[10, 20, 30].map((y) => (

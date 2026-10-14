@@ -21,6 +21,11 @@ const P = {
   bell: 'M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0',
   link: 'M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6',
   map: 'M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21zM12 7a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z',
+  music: 'M9 18V5l12-2v13M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0zM21 16a3 3 0 1 1-6 0 3 3 0 0 1 6 0z',
+  play: 'M7 4v16l13-8z',
+  pause: 'M7 4h3v16H7zM14 4h3v16h-3z',
+  volume: 'M11 5 6 9H2v6h4l5 4zM15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14',
+  mute: 'M11 5 6 9H2v6h4l5 4zM16 9l6 6M22 9l-6 6',
   plus: 'M12 5v14M5 12h14',
   edit: 'M4 20h4L19 9l-4-4L4 16zM14 6l4 4',
   close: 'M6 6l12 12M18 6 6 18',
@@ -30,7 +35,7 @@ const P = {
   logout: 'M9 21H5V3h4M16 17l5-5-5-5M21 12H9',
 };
 
-export const ICON_NAMES = Object.keys(P).filter((k) => !['plus', 'edit', 'close', 'grip', 'settings', 'back', 'logout'].includes(k));
+export const ICON_NAMES = Object.keys(P).filter((k) => !['plus', 'edit', 'close', 'grip', 'settings', 'back', 'logout', 'play', 'pause', 'volume', 'mute'].includes(k));
 
 export function Icon({ name, size = 20, className = '', title }) {
   const d = P[name] || P.device;
