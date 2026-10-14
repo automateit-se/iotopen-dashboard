@@ -259,6 +259,23 @@ li.stale .val, .tl-label.stale .tl-now { opacity: 0.45; }
 
 .w-number { display: flex; align-items: center; gap: 12px; }
 .w-number .numset { flex: 1; }
+/* media player */
+.media { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.media-now { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.media-art { flex: none; display: grid; place-items: center; width: 44px; height: 44px; border-radius: 10px; color: var(--tile-color, var(--data)); background: color-mix(in srgb, var(--tile-color, var(--data)) 14%, transparent); }
+.media-text { min-width: 0; }
+.media-title { font-weight: 600; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.media-artist { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.media-ctl { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.media-btn { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 50%; border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; padding: 0; }
+.media-btn:hover:not(:disabled) { border-color: var(--tile-color, var(--data)); }
+.media-btn.on { color: var(--tile-color, var(--data)); border-color: var(--tile-color, var(--data)); }
+.media-btn.primary { width: 44px; height: 44px; background: var(--tile-color, var(--data)); border-color: transparent; color: var(--surface); }
+.media-btn:disabled { opacity: 0.45; cursor: default; }
+.media-vol { display: flex; align-items: center; gap: 8px; min-width: 120px; }
+.media-vol input[type='range'] { flex: 1; min-width: 80px; padding: 0; border: 0; accent-color: var(--tile-color, var(--accent)); }
+.media-vol-val { min-width: 3.2em; text-align: right; font-variant-numeric: tabular-nums; }
+.media.is-off .media-art { opacity: 0.5; }
 .numset input[type='range'] { flex: 1; min-width: 100px; padding: 0; border: 0; accent-color: var(--tile-color, var(--accent)); }
 .numset.compact input[type='range'] { width: 90px; min-width: 0; flex: none; }
 .numset { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }

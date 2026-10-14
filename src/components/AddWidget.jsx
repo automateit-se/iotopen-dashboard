@@ -4,13 +4,14 @@ import { Icon } from './icons.jsx';
 import { WidgetThumb } from './WidgetThumb.jsx';
 import { candidates, isHidden, fitsType, devName as deviceName, WIDGET_LABEL } from '../lib/dashboard.js';
 import { formatValue } from '../lib/format.js';
+import { isMediaDevice } from '../lib/media.js';
 
 // the miniatures under the hint: what can be made from a function or device
-const THUMBS = ['value', 'chart', 'gauge', 'switch', 'status', 'number', 'button', 'consumption', 'card'];
+const THUMBS = ['value', 'chart', 'gauge', 'switch', 'status', 'number', 'button', 'consumption', 'card', 'media'];
 
 /**
  * Lists functions and devices, grouped per device; a function that already has widgets can get another type: click a device to open it and pick one of its
- * functions (or the whole device as a card). Search and the miniatures narrow the list.
+ * functions (or the whole device as a card, or as a media player when it has media functions). Search and the miniatures narrow the list.
  */
 export function AddWidget({ raw, valueOf, onPick, onNewGroup, onNewLink, onClose }) {
   const [q, setQ] = useState('');
@@ -20,7 +21,11 @@ export function AddWidget({ raw, valueOf, onPick, onNewGroup, onNewLink, onClose
   const all = useMemo(() => candidates(raw), [raw]);
   const hiddenCount = all.filter((c) => isHidden(c.obj)).length;
   // with a type chosen: what fits it and does not already have a widget of that type
-  const list = (showHidden ? all : all.filter((c) => !isHidden(c.obj))).filter((c) => !type || (fitsType(type, c.kind, c.obj) && !c.used.includes(type)));
+  // what a device can still become: a card, and a media player when it has media functions
+  const deviceTypes = (c) => ['card', ...(isMediaDevice(raw, c.obj.id) ? ['media'] : [])].filter((t) => !c.used.includes(t) && (!type || t === type));
+  const list = (showHidden ? all : all.filter((c) => !isHidden(c.obj)))
+    .filter((c) => !type || (fitsType(type, c.kind, c.obj) && !c.used.includes(type)))
+    .filter((c) => c.kind !== 'device' || deviceTypes(c).length);
   const needle = q.trim().toLowerCase();
   const hit = (...s) => !needle || s.some((x) => String(x || '').toLowerCase().includes(needle));
 
@@ -90,7 +95,7 @@ export function AddWidget({ raw, valueOf, onPick, onNewGroup, onNewLink, onClose
         </button>
       </div>
       <p className="muted small add-hint">
-        Övriga widgets (värde, graf, mätare, brytare, status, börvärde, tryckknapp, förbrukning, enhetskort): välj först en funktion eller enhet nedan, sedan typ i nästa steg.
+        Övriga widgets (värde, graf, mätare, brytare, status, börvärde, tryckknapp, förbrukning, enhetskort, media): välj först en funktion eller enhet nedan, sedan typ i nästa steg.
         Klicka på en miniatyr för att bara se det som passar. En funktion kan ha flera widgets, t.ex. både brytare och tryckknapp.
       </p>
       <div className="thumbs" role="group" aria-label="Widgettyper">
@@ -129,12 +134,22 @@ export function AddWidget({ raw, valueOf, onPick, onNewGroup, onNewLink, onClose
                   <strong>{g.name}</strong>
                   <span className="muted small grow">
                     {g.dev?.type ? ` · ${g.dev.type}` : ''}
-                    {g.fns.length ? ` · ${g.fns.length} ${g.fns.length === 1 ? 'funktion' : 'funktioner'}` : ' · som enhetskort'}
+                    {g.fns.length ? ` · ${g.fns.length} ${g.fns.length === 1 ? 'funktion' : 'funktioner'}` : ` · som ${deviceTypes(g.card).map((t) => (t === 'media' ? 'mediaspelare' : 'enhetskort')).join(' eller ')}`}
                   </span>
                 </button>
                 {isOpen(g) && (
                   <ul className="pick-list">
-                    {g.card && (
+                    {g.card && deviceTypes(g.card).includes('media') && (
+                      <li>
+                        <button type="button" onClick={() => onPick(g.card, 'media')}>
+                          <span>
+                            <strong>Hela enheten som mediaspelare</strong>
+                            <span className="muted small"> · låt, status, spela/pausa, volym</span>
+                          </span>
+                        </button>
+                      </li>
+                    )}
+                    {g.card && deviceTypes(g.card).includes('card') && (
                       <li>
                         <button type="button" onClick={() => onPick(g.card, 'card')}>
                           <span>

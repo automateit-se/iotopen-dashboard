@@ -28,7 +28,7 @@ export const safeColor = (v) => {
 };
 
 // icon names the dashboard can draw (components/icons.jsx); IoT Open's meta "icon" is used when it matches
-const ICON_SET = new Set(['bolt', 'thermometer', 'droplet', 'power', 'lightbulb', 'gauge', 'door', 'lift', 'wind', 'home', 'chart', 'alert', 'sun', 'fan', 'lock', 'signal', 'battery', 'device', 'bell', 'link', 'map']);
+const ICON_SET = new Set(['bolt', 'thermometer', 'droplet', 'power', 'lightbulb', 'gauge', 'door', 'lift', 'wind', 'home', 'chart', 'alert', 'sun', 'fan', 'lock', 'signal', 'battery', 'device', 'bell', 'link', 'map', 'music']);
 
 export const INST_META = {
   title: 'dashboard.title',
@@ -136,7 +136,10 @@ export const FUNCTION_WIDGETS = [
   { id: 'consumption', label: 'Förbrukning', help: 'Staplar per timme, dygn, vecka eller månad från en mätarställning (el, vatten, besökare…). Använder sammanställd data från IoT Open.' },
   { id: 'button', label: 'Tryckknapp', help: 'Fjädrande knapp, t.ex. dörrklocka: skickar ett värde när den trycks ned och (valfritt) ett när den släpps.' },
 ];
-export const DEVICE_WIDGETS = [{ id: 'card', label: 'Enhetskort', help: 'Alla funktioner som hör till enheten i ett kort.' }];
+export const DEVICE_WIDGETS = [
+  { id: 'card', label: 'Enhetskort', help: 'Alla funktioner som hör till enheten i ett kort.' },
+  { id: 'media', label: 'Media', help: 'Mediaspelare: aktuell låt, status, spela/pausa, volym, mute och på/av från enhetens funktioner (…/playing, …/volume, …/mute, …/state, …/power).' },
+];
 export const WIDGET_LABEL = { ...Object.fromEntries([...FUNCTION_WIDGETS, ...DEVICE_WIDGETS].map((w) => [w.id, w.label])), timeline: 'Tidslinje', multichart: 'Graf (flera)', tracker: 'Karta (Tracker)', www: 'Länkknapp (www)' };
 
 /** Widget types that can be half a row high, e.g. a banner across the top of the dashboard. */
@@ -148,7 +151,7 @@ export const heightOptions = (type) => [...(HALF_HEIGHT_TYPES.includes(type) ? [
  * Value, graph, gauge and status take any function.
  */
 export function fitsType(type, kind, obj) {
-  if (type === 'card') return kind === 'device';
+  if (type === 'card' || type === 'media') return kind === 'device';
   if (kind !== 'function') return false;
   if (type === 'switch') return !!controlTopic(obj, writeTopic(obj)) && isBinary(obj);
   if (type === 'button') return !!controlTopic(obj, writeTopic(obj));
@@ -173,6 +176,7 @@ export const DEFAULT_LAYOUT = {
   gauge: { w: 2, h: 2, min: 0, max: 100 },
   chart: { w: 4, h: 2, hours: 24 },
   card: { w: 4, h: 2 },
+  media: { w: 4, h: 2 },
   timeline: { w: 8, h: 2, hours: 24 },
   multichart: { w: 4, h: 2, hours: 24 },
   tracker: { w: 4, h: 3, hours: 24, points: 200, pair: 5, fade: true },
@@ -370,11 +374,11 @@ export const isHidden = (o) => ['0', 'false', 'no'].includes(String(o?.meta?.vis
 
 /**
  * Objects that can get a (another) widget, with the types they already have: every function (one function
- * can have several widgets), and devices without a card.
+ * can have several widgets), and every device (as a card and/or a media player).
  */
 export function candidates(raw) {
   return [
-    ...raw.devices.filter((o) => !widgetTypes(o).length).map((o) => ({ kind: 'device', obj: o, name: devName(o), used: [] })),
+    ...raw.devices.map((o) => ({ kind: 'device', obj: o, name: devName(o), used: widgetTypes(o) })),
     ...raw.functions.map((o) => ({ kind: 'function', obj: o, name: fnName(o), used: widgetTypes(o) })),
   ];
 }
