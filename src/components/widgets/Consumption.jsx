@@ -22,7 +22,6 @@ export const VIEWS = [
   ['day', 30, '30 d'],
   ['week', 12, '12 v'],
   ['week', 52, '1 år'],
-  ['month', 12, '12 mån'],
 ];
 const DAY = 86400;
 const WEEKDAYS = ['sön', 'mån', 'tis', 'ons', 'tor', 'fre', 'lör'];
