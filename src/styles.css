@@ -146,6 +146,16 @@ input:focus, select:focus, button:focus-visible { outline: 2px solid var(--accen
 .page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
 /* installation title – dashboard.color_title, otherwise the heading colour */
 .page-head h1 { color: var(--title-color, var(--heading)); }
+/* pages: tabs under the title */
+.page-tabs { display: flex; align-items: center; gap: 8px; margin: -4px 0 16px; border-bottom: 1px solid var(--border); }
+.page-tab-list { display: flex; gap: 4px; overflow-x: auto; flex: 1; min-width: 0; scrollbar-width: thin; }
+.page-tab { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; white-space: nowrap; color: var(--muted); text-decoration: none; border-bottom: 2px solid transparent; margin-bottom: -1px; font-weight: 500; }
+.page-tab:hover { color: var(--text); }
+.page-tab.on { color: var(--heading); border-bottom-color: var(--data); }
+.page-tab-tools { display: flex; align-items: center; gap: 4px; flex: none; }
+.icon-btn.flip svg { transform: scaleX(-1); }
+.icon-btn:disabled { opacity: 0.35; cursor: default; }
+.page-move { font: inherit; font-size: 12px; padding: 2px 4px; max-width: 110px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); }
 /* "< Installationer" sits on the page background like the title, so it follows the title colour when one is
    set (e.g. white title on a dark background) – otherwise the accent colour */
 .back { display: inline-flex; align-items: center; gap: 2px; font-size: 13px; color: var(--title-color, var(--accent)); }

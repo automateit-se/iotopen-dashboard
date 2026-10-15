@@ -22,9 +22,10 @@ export function AddWidget({ raw, valueOf, onPick, onNewGroup, onNewLink, onClose
   const hiddenCount = all.filter((c) => isHidden(c.obj)).length;
   // with a type chosen: what fits it and does not already have a widget of that type
   // what a device can still become: a card, and a media player when it has media functions
-  const deviceTypes = (c) => ['card', ...(isMediaDevice(raw, c.obj.id) ? ['media'] : [])].filter((t) => !c.used.includes(t) && (!type || t === type));
+  // (one more of a type the object already has becomes an extra widget, e.g. a second push button)
+  const deviceTypes = (c) => ['card', ...(isMediaDevice(raw, c.obj.id) ? ['media'] : [])].filter((t) => !type || t === type);
   const list = (showHidden ? all : all.filter((c) => !isHidden(c.obj)))
-    .filter((c) => !type || (fitsType(type, c.kind, c.obj) && !c.used.includes(type)))
+    .filter((c) => !type || fitsType(type, c.kind, c.obj))
     .filter((c) => c.kind !== 'device' || deviceTypes(c).length);
   const needle = q.trim().toLowerCase();
   const hit = (...s) => !needle || s.some((x) => String(x || '').toLowerCase().includes(needle));
@@ -91,12 +92,12 @@ export function AddWidget({ raw, valueOf, onPick, onNewGroup, onNewLink, onClose
           <Icon name="map" size={16} /> Ny karta (Tracker) med position och spår
         </button>
         <button type="button" className="btn block-left" onClick={onNewLink}>
-          <Icon name="link" size={16} /> Ny länkknapp (www) till en annan webbsida
+          <Icon name="link" size={16} /> Ny länkknapp till en webbsida eller en annan sida i dashboarden
         </button>
       </div>
       <p className="muted small add-hint">
         Övriga widgets (värde, graf, mätare, brytare, status, börvärde, tryckknapp, förbrukning, enhetskort, media): välj först en funktion eller enhet nedan, sedan typ i nästa steg.
-        Klicka på en miniatyr för att bara se det som passar. En funktion kan ha flera widgets, t.ex. både brytare och tryckknapp.
+        Klicka på en miniatyr för att bara se det som passar. En funktion kan ha flera widgets, även av samma typ, t.ex. fyra tryckknappar som skickar olika värden.
       </p>
       <div className="thumbs" role="group" aria-label="Widgettyper">
         {THUMBS.map((t) => (

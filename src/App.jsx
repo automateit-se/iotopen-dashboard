@@ -26,12 +26,20 @@ class Boundary extends Component {
   }
 }
 
+const safeDecode = (s) => {
+  try {
+    return decodeURIComponent(s);
+  } catch {
+    return '';
+  }
+};
+
 function Shell() {
   const { user, booting, signOut, brandLogo } = useApp();
   const path = useRoute();
   if (booting) return <div className="center-screen muted">Laddar…</div>;
   if (!user) return <Login />;
-  const m = /^\/i\/(\d+)/.exec(path);
+  const m = /^\/i\/(\d+)(?:\/p\/([^/]+))?/.exec(path);
   return (
     <div className="app">
       <header className="topbar">
@@ -46,7 +54,8 @@ function Shell() {
         </button>
       </header>
       <main>
-        <Boundary key={path}>{m ? <Dashboard key={m[1]} iid={Number(m[1])} /> : <Installations />}</Boundary>
+        {/* switching page keeps the installation (and its live connection) loaded */}
+        <Boundary key={m ? `i${m[1]}` : path}>{m ? <Dashboard key={m[1]} iid={Number(m[1])} pageId={m[2] ? safeDecode(m[2]) : ''} /> : <Installations />}</Boundary>
       </main>
       <footer className="app-foot">
         <span className="app-version" title="Dashboardens version">
