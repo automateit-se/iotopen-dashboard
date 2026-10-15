@@ -216,7 +216,18 @@ export function ButtonWidget({ w, ctx }) {
 }
 
 // ---- link button (www) ---------------------------------------------------------------------------
-export function LinkWidget({ w }) {
+export function LinkWidget({ w, iid }) {
+  // a page of this dashboard: a plain hash link, same tab
+  if (w.layout.target_page) {
+    return (
+      <div className="w-link">
+        <a className="link-btn-big" href={`#/i/${iid}/p/${encodeURIComponent(w.layout.target_page)}`}>
+          <Icon name={w.icon || 'home'} size={18} />
+          <span>{w.name}</span>
+        </a>
+      </div>
+    );
+  }
   const url = safeUrl(w.layout.url);
   if (!url) return <div className="muted small">Ingen giltig webbadress (http/https).</div>;
   const newTab = w.layout.newTab !== false;
@@ -228,6 +239,11 @@ export function LinkWidget({ w }) {
       </a>
     </div>
   );
+}
+
+// ---- an extra widget whose function or device is gone ------------------------------------------------
+export function MissingWidget() {
+  return <div className="muted small">Funktionen eller enheten finns inte längre. Ta bort widgeten i redigeringsläget.</div>;
 }
 
 // ---- gauge ---------------------------------------------------------------------------------
@@ -305,4 +321,5 @@ export const WIDGET_COMPONENTS = {
   chart: ChartWidget,
   card: CardWidget,
   media: MediaWidget,
+  missing: MissingWidget,
 };

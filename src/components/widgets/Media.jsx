@@ -34,7 +34,9 @@ function stateTextOf(fn, v) {
   const val = v.value;
   if (typeof val === 'string' && val.trim() && !Number.isFinite(Number(val))) return mediaStateText(val);
   if (v.msg) return mediaStateText(v.msg);
-  return val === undefined || val === null || val === '' ? '' : formatValue(fn, val);
+  // a bare number is no state: IoT Open's status API can return 0 for a text value, so the widget falls back
+  // to what "Uppspelning" says until the next live message
+  return '';
 }
 
 const rawState = (fn, v) => {
@@ -65,7 +67,7 @@ export function MediaWidget({ w, ctx }) {
   const off = (m.power && power.v && !power.on && !power.pending) || st === 'off' || st === 'unavailable';
   // the track stays while paused; idle/off clear it at the source (empty msg)
   const track = String(play.v?.msg || '').trim();
-  const stateText = stateTextOf(m.state, stateV) || (m.playing && play.v ? (play.on ? 'Spelar' : 'Pausad') : '');
+  const stateText = stateTextOf(m.state, stateV) || (m.playing && play.v ? (play.on ? 'Spelar' : 'Pausad') : m.power && power.v ? (power.on ? 'På' : 'Avstängd') : '');
   const lastTs = Math.max(play.v?.timestamp || 0, stateV?.timestamp || 0);
   const vol = slide ?? (Number.isFinite(Number(volV?.value)) ? Number(volV.value) : range.min);
   const volWrite = m.volume ? writeTopic(m.volume) : '';

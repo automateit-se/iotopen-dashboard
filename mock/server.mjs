@@ -142,7 +142,8 @@ function signal(iid, topic, gen) {
   fn(iid, sonos, 'text', 'Sonos Vardagsrum Status', `${mp}/state`);
   fn(iid, sonos, 'switch', 'Sonos Vardagsrum På/av', `${mp}/power`, { topic_write: `set/${mp}/power`, state_on: '1', state_off: '0' });
   media.set(mp, { iid, client: 5001, track: 0 });
-  // a simpler player without mute and power support
+  // a simpler player without mute and power support; its state comes as 0 from the status API, like a text
+  // value can in IoT Open, until the next live message
   const radio = dev(iid, 'media_player', 'Radio kök');
   const rp = 'obj/ha/media_player/kok';
   fn(iid, radio, 'switch', 'Radio kök Uppspelning', `${rp}/playing`, { topic_write: `set/${rp}/playing`, state_on: '1', state_off: '0' });
@@ -150,7 +151,7 @@ function signal(iid, topic, gen) {
   fn(iid, radio, 'text', 'Radio kök Status', `${rp}/state`);
   for (const [topic, value, msg] of [
     [`${mp}/playing`, 1, TRACKS[0]], [`${mp}/volume`, 35, ''], [`${mp}/mute`, 0, ''], [`${mp}/state`, 'playing', ''], [`${mp}/power`, 1, ''],
-    [`${rp}/playing`, 0, 'P1 – Morgonpasset'], [`${rp}/volume`, 20, ''], [`${rp}/state`, 'paused', ''],
+    [`${rp}/playing`, 0, 'P1 – Morgonpasset'], [`${rp}/volume`, 20, ''], [`${rp}/state`, 0, ''],
   ]) setStatus({ client_id: 5001, installation_id: iid, topic, value, msg, timestamp: now() - 120 });
   for (const [topic, v] of [['obj/zwave/12/setpoint', 21.5], ['obj/zwave/20/state', 0], ['obj/vent/1/state', 1]]) setStatus({ client_id: 5001, installation_id: iid, topic, value: v, msg: '', timestamp: now() - 600 });
 }

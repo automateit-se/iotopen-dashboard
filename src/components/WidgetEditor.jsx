@@ -27,19 +27,22 @@ function newStateKey(row, rows) {
  * Edits one widget (or creates one from a candidate when `isNew`).
  * Simple settings go to the object's metadata, size and technical parameters to the layout file.
  */
-export function WidgetEditor({ kind, obj, widgetType, layoutEntry, isNew, onSave, onRemove, onClose }) {
+export function WidgetEditor({ kind, obj, widgetType, layoutEntry, isNew, extra = false, onSave, onRemove, onClose }) {
   const m = obj.meta || {};
   const types = kind === 'device' ? DEVICE_WIDGETS : FUNCTION_WIDGETS;
-  // types the object's other widgets already have (one widget per type)
-  const taken = widgetTypes(obj).filter((t) => isNew || t !== widgetType);
-  const free = (t) => !taken.includes(t);
+  // types the object's metadata widgets already have; one more of the same type becomes an extra widget
+  // (layout file only), so a new widget or an extra one can be any type
+  const taken = extra ? widgetTypes(obj) : widgetTypes(obj).filter((t) => isNew || t !== widgetType);
+  const free = (t) => isNew || extra || !taken.includes(t);
   const [type, setType] = useState(() => {
     if (!isNew && widgetType) return widgetType;
     const s = layoutEntry?.suggested;
     return s && free(s) ? s : (types.find((t) => free(t.id)) || types[0]).id;
   });
   // with several widgets on the object, the colour is stored per widget (layout file) instead of dashboard.color
-  const several = taken.length > 0;
+  const several = taken.length > 0 || extra;
+  // an extra widget: name, icon, colour and control settings are its own (layout file)
+  const extraMode = extra || (isNew && taken.includes(type));
   const [nickname, setNickname] = useState(m[OBJ_META.nickname] || '');
   const [color, setColor] = useState(several ? layoutEntry?.color || '' : m[OBJ_META.color] || '');
   const [icon, setIcon] = useState(m[OBJ_META.icon] || '');
@@ -177,10 +180,16 @@ export function WidgetEditor({ kind, obj, widgetType, layoutEntry, isNew, onSave
         {objLabel} · {m.name || '–'}
         {m.topic_read ? ` · ${m.topic_read}` : ''}
       </p>
-      {taken.length > 0 && (
+      {extraMode ? (
         <p className="muted small">
-          Funktionen har {isNew ? 'redan' : 'också'} {taken.map((t) => WIDGET_LABEL[t] || t).join(', ')} på dashboarden. Namn, ikon, gränsvärden och tillstånd delas, storlek och färg är egna per widget.
+          {isNew ? `${kind === 'device' ? 'Enheten' : 'Funktionen'} har redan en ${(WIDGET_LABEL[type] || type).toLowerCase()}, så den här blir en egen widget.` : 'Egen widget.'} Namn, ikon, färg och inställningar för styrning gäller bara den här widgeten och sparas i layoutfilen. Gränsvärden, tillstånd och synlighet delas med {kind === 'device' ? 'enheten' : 'funktionen'}.
         </p>
+      ) : (
+        taken.length > 0 && (
+          <p className="muted small">
+            Funktionen har {isNew ? 'redan' : 'också'} {taken.map((t) => WIDGET_LABEL[t] || t).join(', ')} på dashboarden. Namn, ikon, gränsvärden och tillstånd delas, storlek och färg är egna per widget.
+          </p>
+        )
       )}
       <Field label="Typ">
         <div className="seg">

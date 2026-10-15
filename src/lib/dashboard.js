@@ -17,6 +17,14 @@
 //
 // Widget keys are "f:<function id>" and "d:<device id>" for the first type in dashboard.widget and
 // "f:<id>:<type>" for the others; link buttons (www) live only in the layout file as "u:<id>".
+//
+// Extra widgets ("x:<n>") also live only in the layout file: { type, ref: "f:<id>" | "d:<id>", label, icon,
+// press, … }. They let one function have several widgets of the same type, e.g. four push buttons that send
+// 10, 20, 73 and 94. Their name, icon, colour and control settings are their own; limits, states and visible
+// stay on the function.
+//
+// Pages: layout.pages = [{ id, title, icon, theme: { "dashboard.color_*": colour } }]; a widget's layout entry
+// says which page it is on ("page", default the first). No pages = one page without tabs.
 
 import { lynx } from '../api/lynx.js';
 import { stateMap, stateFor } from './format.js';
@@ -140,7 +148,7 @@ export const DEVICE_WIDGETS = [
   { id: 'card', label: 'Enhetskort', help: 'Alla funktioner som hör till enheten i ett kort.' },
   { id: 'media', label: 'Media', help: 'Mediaspelare: aktuell låt, status, spela/pausa, volym, mute och på/av från enhetens funktioner (…/playing, …/volume, …/mute, …/state, …/power).' },
 ];
-export const WIDGET_LABEL = { ...Object.fromEntries([...FUNCTION_WIDGETS, ...DEVICE_WIDGETS].map((w) => [w.id, w.label])), timeline: 'Tidslinje', multichart: 'Graf (flera)', tracker: 'Karta (Tracker)', www: 'Länkknapp (www)' };
+export const WIDGET_LABEL = { ...Object.fromEntries([...FUNCTION_WIDGETS, ...DEVICE_WIDGETS].map((w) => [w.id, w.label])), timeline: 'Tidslinje', multichart: 'Graf (flera)', tracker: 'Karta (Tracker)', www: 'Länkknapp (www)', missing: 'Saknas' };
 
 /** Widget types that can be half a row high, e.g. a banner across the top of the dashboard. */
 export const HALF_HEIGHT_TYPES = ['value', 'status', 'switch', 'button', 'www'];
@@ -315,22 +323,116 @@ export function buildWidgets(raw, layout) {
       });
     }
   }
+  // extra widgets: only in the layout file, pointing at a function or device
+  const fnById = new Map(raw.functions.map((f) => [String(f.id), f]));
+  const devById = new Map(raw.devices.map((d) => [String(d.id), d]));
+  for (const [key, l] of Object.entries(layout.widgets || {})) {
+    if (!key.startsWith(`${EXTRA_PREFIX}:`)) continue;
+    const [refKind, refId] = String(l.ref || '').split(':');
+    const kind = refKind === 'd' ? 'device' : 'function';
+    const base = (kind === 'device' ? devById : fnById).get(String(refId));
+    const lay = { ...(DEFAULT_LAYOUT[l.type] || { w: 1, h: 1 }), ...l };
+    if (!base || !l.type) {
+      out.push({ key, kind: 'missing', type: 'missing', name: String(l.label || '').trim() || 'Widget utan funktion', color: '', icon: '', layout: lay, hidden: false });
+      continue;
+    }
+    const obj = extraObject(base, l);
+    out.push({
+      key,
+      kind,
+      extra: true,
+      obj,
+      baseObj: base,
+      type: l.type,
+      types: [l.type],
+      name: kind === 'device' ? devName(obj) : fnName(obj),
+      color: safeColor(l.color) || safeColor(base.meta?.[OBJ_META.color]),
+      icon: obj.meta?.[OBJ_META.icon] || (ICON_SET.has(obj.meta?.icon) ? obj.meta.icon : ''),
+      layout: lay,
+      hidden: isHidden(base),
+    });
+  }
   // link buttons (www): only in the layout file, no IoT Open object behind them
   for (const [key, l] of Object.entries(layout.widgets || {})) {
     if (!key.startsWith(`${LINK_PREFIX}:`)) continue;
+    const target = l.target_page ? (layout.pages || []).find((p) => p.id === l.target_page) : null;
     out.push({
       key,
       kind: 'link',
       type: 'www',
-      name: String(l.label || '').trim() || hostOf(l.url) || 'Länk',
+      name: String(l.label || '').trim() || target?.title || hostOf(l.url) || 'Länk',
       color: safeColor(l.color),
-      icon: ICON_SET.has(l.icon) ? l.icon : 'link',
+      icon: ICON_SET.has(l.icon) ? l.icon : l.target_page ? 'home' : 'link',
       layout: { ...DEFAULT_LAYOUT.www, ...l },
       hidden: false,
     });
   }
   // explicit order from the layout file first, then the rest by name
   return out.sort((a, b) => (a.layout.order ?? 1e9) - (b.layout.order ?? 1e9) || a.name.localeCompare(b.name, 'sv'));
+}
+
+// ---- extra widgets (layout file only) ----------------------------------------------------------------
+export const EXTRA_PREFIX = 'x';
+
+/** Settings an extra widget keeps for itself: editor field -> layout entry key (and the meta key it overlays). */
+export const EXTRA_FIELDS = {
+  nickname: 'label',
+  icon: 'icon',
+  press: 'press',
+  release: 'release',
+  press_msg: 'press_msg',
+  release_msg: 'release_msg',
+  on_msg: 'on_msg',
+  off_msg: 'off_msg',
+  topic: 'topic',
+};
+
+/**
+ * The function/device as an extra widget sees it: its own label, icon and control settings laid over the
+ * object's metadata (control settings never fall back to the object's, so two buttons stay independent).
+ */
+export function extraObject(base, l) {
+  const meta = { ...(base.meta || {}) };
+  for (const [field, key] of Object.entries(EXTRA_FIELDS)) {
+    const v = String(l[key] ?? '').trim();
+    const metaKey = OBJ_META[field];
+    if (v) meta[metaKey] = v;
+    else if (field !== 'nickname' && field !== 'icon') delete meta[metaKey];
+  }
+  return { ...base, meta };
+}
+
+/** A new, unused key for an extra widget. */
+export const newExtraKey = (layout) => {
+  let n = 1;
+  while (layout.widgets?.[`${EXTRA_PREFIX}:${n}`]) n++;
+  return `${EXTRA_PREFIX}:${n}`;
+};
+
+// ---- pages ---------------------------------------------------------------------------------------------
+export const DEFAULT_PAGE = { id: 'start', title: 'Start' };
+
+/** The pages of the dashboard; at least one. */
+export const pagesOf = (layout) => (Array.isArray(layout?.pages) && layout.pages.length ? layout.pages : [DEFAULT_PAGE]);
+
+/** The page a widget is on: its layout entry's page when that page exists, else the first page. */
+export function pageOfWidget(w, pages) {
+  const p = w.layout?.page;
+  return p && pages.some((x) => x.id === p) ? p : pages[0].id;
+}
+
+/** A page id from a title: a-z, 0-9 and "-", unique among the pages. */
+export function newPageId(title, pages) {
+  const base =
+    String(title || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'sida';
+  let id = base;
+  for (let n = 2; pages.some((p) => p.id === id); n++) id = `${base}-${n}`;
+  return id;
 }
 
 // ---- link buttons (www) ---------------------------------------------------------------------------

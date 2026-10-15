@@ -7,10 +7,11 @@ import { AddWidget } from '../components/AddWidget.jsx';
 import { InstallationSettings } from '../components/InstallationSettings.jsx';
 import { TimelineEditor } from '../components/TimelineEditor.jsx';
 import { LinkEditor } from '../components/LinkEditor.jsx';
+import { PageEditor, PageTabs } from '../components/Pages.jsx';
 import { worstStatus, staleOf, staleDevice } from '../lib/status.js';
 import { errText } from '../components/Modal.jsx';
 import { Icon } from '../components/icons.jsx';
-import { INST_META, OBJ_META, GROUPS, WIDGET_LABEL, THEME_META, applyTheme, isAdmin, writeLayout, writeObjectMeta, suggestType, widgetFunctions, fnName, stateColor, isLight, newLinkKey, widgetTypes, widgetKey } from '../lib/dashboard.js';
+import { INST_META, OBJ_META, GROUPS, WIDGET_LABEL, THEME_META, EXTRA_FIELDS, applyTheme, isAdmin, writeLayout, writeObjectMeta, suggestType, widgetFunctions, fnName, stateColor, isLight, newLinkKey, newExtraKey, widgetTypes, widgetKey, keyOf, pagesOf, pageOfWidget, newPageId } from '../lib/dashboard.js';
 
 const LIVE_LABEL = { live: 'Live', connecting: 'Ansluter…', offline: 'Polling', failed: 'Polling', off: 'Polling' };
 
@@ -26,7 +27,7 @@ function useColumns() {
   return cols;
 }
 
-export default function Dashboard({ iid }) {
+export default function Dashboard({ iid, pageId = '' }) {
   const { user, setBrandLogo } = useApp();
   const ctx = useInstallation(iid);
   const { inst, raw, layout, setLayout, widgets, logo, reloadLogo, error, loading, liveState, reload } = ctx;
@@ -36,22 +37,30 @@ export default function Dashboard({ iid }) {
   const [adding, setAdding] = useState(false);
   const [timelineEditor, setTimelineEditor] = useState(null); // { group: 'timeline'|'chart', name } – name null = new
   const [linkEditor, setLinkEditor] = useState(null); // { key } – key null = new
+  const [pageEditor, setPageEditor] = useState(null); // { id } – id null = new
   const [settings, setSettings] = useState(false);
   const [dragKey, setDragKey] = useState(null);
   const [saveError, setSaveError] = useState('');
 
   const admin = inst && user ? isAdmin(user, inst) : false;
+  // pages: the one in the address, else the first; each widget is on one page
+  const pages = pagesOf(layout);
+  const page = pages.find((p) => p.id === pageId) || pages[0];
+  const onPage = widgets.filter((w) => pageOfWidget(w, pages) === page.id);
   // visible = "false" in IoT Open hides a widget; in edit mode it stays (dimmed) so it can be managed
-  const shown = editing ? widgets : widgets.filter((w) => !w.hidden);
+  const shown = editing ? onPage : onPage.filter((w) => !w.hidden);
+  // a new widget lands on the page being edited (nothing stored for the first page)
+  const pageField = page.id === pages[0].id ? {} : { page: page.id };
   const title = inst?.meta?.[INST_META.title] || inst?.name || `Installation ${iid}`;
 
   useEffect(() => {
     document.title = title;
   }, [title]);
 
-  // colours from installation meta dashboard.color_* (restored when leaving the installation)
-  const themeKey = JSON.stringify(THEME_META.map((t) => inst?.meta?.[t.key] || ''));
-  useEffect(() => (inst ? applyTheme(inst) : undefined), [themeKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  // colours from installation meta dashboard.color_*, with the page's own colours on top (restored when leaving)
+  const themeMeta = { ...(inst?.meta || {}), ...(page.theme || {}) };
+  const themeKey = JSON.stringify(THEME_META.map((t) => themeMeta[t.key] || ''));
+  useEffect(() => (inst ? applyTheme({ ...inst, meta: themeMeta }) : undefined), [themeKey, !!inst]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // logo from the installation file dashboard-logo.png in the header (IoT Open's again when leaving)
   useEffect(() => {
@@ -96,6 +105,7 @@ export default function Dashboard({ iid }) {
     const entry = { ...(all[key] || {}), ...params };
     if (!entry.color) delete entry.color;
     if (entry.order === undefined) entry.order = widgets.length;
+    if (!oldType) Object.assign(entry, pageField);
     await writeLayout(iid, { ...layout, widgets: { ...all, [key]: entry } });
     setEditor(null);
     await reload({ quiet: true });
@@ -110,6 +120,41 @@ export default function Dashboard({ iid }) {
     if (after.length) await writeLayout(iid, { ...layout, widgets: relayout({ ...layout.widgets }, kind, obj, before, after) });
     setEditor(null);
     await reload({ withLayout: !!after.length, quiet: true });
+  };
+
+  /**
+   * Extra widgets (layout file only): a new one when the object already has a widget of the type, or an existing
+   * "x:<n>". Name, icon, colour and control settings go to the layout entry, the rest (limits, states, visible)
+   * to the object's metadata as usual.
+   */
+  const onSaveExtra = async (key, kind, base, metaValues, params) => {
+    const { widget: type, ...rest } = metaValues;
+    const own = {};
+    const shared = {};
+    for (const [k, v] of Object.entries(rest)) (EXTRA_FIELDS[k] ? (own[EXTRA_FIELDS[k]] = v) : (shared[k] = v));
+    // the object's own name/icon are not copied into the widget, so they keep following the object
+    if (own.label === String(base.meta?.[OBJ_META.nickname] || '')) own.label = '';
+    if (own.icon === String(base.meta?.[OBJ_META.icon] || '')) own.icon = '';
+    await writeObjectMeta(iid, kind, base, shared);
+    const all = { ...layout.widgets };
+    widgets.forEach((w, i) => (all[w.key] = { ...(all[w.key] || {}), order: i }));
+    const k = key || newExtraKey(layout);
+    const entry = { ...(all[k] || { order: widgets.length, ...pageField }), ...params, ...own, type, ref: keyOf(kind, base.id) };
+    for (const [p, v] of Object.entries(entry)) if (v === '' || v === undefined) delete entry[p];
+    if (key) for (const f of Object.values(EXTRA_FIELDS)) if (!own[f]) delete entry[f];
+    await writeLayout(iid, { ...layout, widgets: { ...all, [k]: entry } });
+    setEditor(null);
+    await reload({ quiet: true });
+  };
+
+  /** Removes a layout-only widget (extra widget, link button). */
+  const onRemoveEntry = async (key) => {
+    const all = { ...layout.widgets };
+    delete all[key];
+    await writeLayout(iid, { ...layout, widgets: all });
+    setEditor(null);
+    setLinkEditor(null);
+    await reload({ quiet: true });
   };
 
   /**
@@ -130,7 +175,7 @@ export default function Dashboard({ iid }) {
     if (oldName) delete all[`${g.prefix}:${oldName}`];
     const { color, ...rest } = params;
     const key = `${g.prefix}:${name}`;
-    all[key] = { ...(oldEntry || { order: widgets.length }), ...rest, ...(color ? { color } : {}) };
+    all[key] = { ...(oldEntry || { order: widgets.length, ...pageField }), ...rest, ...(color ? { color } : {}) };
     if (!color) delete all[key].color;
     if (!Object.keys(all[key].series || {}).length) delete all[key].series;
     await writeLayout(iid, { ...layout, widgets: all });
@@ -153,23 +198,86 @@ export default function Dashboard({ iid }) {
     const all = { ...layout.widgets };
     widgets.forEach((w, i) => (all[w.key] = { ...(all[w.key] || {}), order: i }));
     const k = key || newLinkKey(layout);
-    all[k] = { ...(all[k] || { order: widgets.length }), ...params };
-    for (const p of ['color', 'icon']) if (!all[k][p]) delete all[k][p];
+    all[k] = { ...(all[k] || { order: widgets.length, ...pageField }), ...params };
+    for (const p of ['color', 'icon', 'url', 'target_page', 'label']) if (!all[k][p]) delete all[k][p];
     await writeLayout(iid, { ...layout, widgets: all });
     setLinkEditor(null);
     await reload({ quiet: true });
   };
 
-  const onRemoveLink = async (key) => {
+  const onRemoveLink = onRemoveEntry;
+
+  /** Moves a widget to another page (the first page = no "page" in its entry). */
+  const moveToPage = (w, id) => {
+    const next = { ...layout, widgets: { ...layout.widgets } };
+    const entry = { ...(next.widgets[w.key] || {}) };
+    if (id === pages[0].id) delete entry.page;
+    else entry.page = id;
+    next.widgets[w.key] = entry;
+    saveLayout(next);
+  };
+
+  /** Pages: title, icon and own colours; a removed page's widgets go to the first page. */
+  const onSavePage = async (id, values) => {
+    const list = layout.pages?.length ? [...layout.pages] : [{ ...pages[0] }];
+    let target = id;
+    if (id) list.splice(list.findIndex((p) => p.id === id), 1, { ...list.find((p) => p.id === id), ...values });
+    else {
+      target = newPageId(values.title, list);
+      list.push({ id: target, ...values });
+    }
+    for (const p of list) if (p.theme && !Object.keys(p.theme).length) delete p.theme;
+    await saveLayout({ ...layout, pages: list });
+    setPageEditor(null);
+    navigate(target);
+  };
+
+  const onRemovePage = async (id) => {
+    const list = (layout.pages || []).filter((p) => p.id !== id);
     const all = { ...layout.widgets };
-    delete all[key];
-    await writeLayout(iid, { ...layout, widgets: all });
-    setLinkEditor(null);
-    await reload({ quiet: true });
+    for (const [k, e] of Object.entries(all)) {
+      if (e?.page === id || (e?.page && e.page === list[0]?.id)) {
+        const { page: _p, ...restEntry } = e;
+        all[k] = restEntry;
+      }
+      if (e?.target_page === id) all[k] = { ...all[k], target_page: list[0]?.id || '' };
+    }
+    await saveLayout({ ...layout, pages: list.length ? list : undefined, widgets: all });
+    setPageEditor(null);
+    navigate(list[0]?.id || '');
   };
 
-  const openEditor = (w) =>
-    GROUPS[w.kind] ? setTimelineEditor({ group: w.kind, name: w.name }) : w.kind === 'link' ? setLinkEditor({ key: w.key }) : setEditor({ kind: w.kind, obj: w.obj, widgetType: w.type, key: w.key });
+  /** Moves a page one step left (-1) or right (+1) in the tabs. */
+  const movePage = (id, step) => {
+    const list = [...pages];
+    const i = list.findIndex((p) => p.id === id);
+    const j = i + step;
+    if (j < 0 || j >= list.length) return;
+    [list[i], list[j]] = [list[j], list[i]];
+    // the first page holds the widgets without "page": every widget keeps its page when the first one changes
+    const all = { ...layout.widgets };
+    for (const w of widgets) {
+      const cur = pageOfWidget(w, pages);
+      all[w.key] = { ...(all[w.key] || {}) };
+      if (cur === list[0].id) delete all[w.key].page;
+      else all[w.key].page = cur;
+    }
+    saveLayout({ ...layout, pages: list, widgets: all });
+  };
+
+  const navigate = (id) => {
+    window.location.hash = !id || id === (layout.pages?.[0]?.id || pages[0].id) ? `#/i/${iid}` : `#/i/${iid}/p/${encodeURIComponent(id)}`;
+  };
+
+  const openEditor = (w) => {
+    if (w.kind === 'missing') {
+      if (window.confirm(`Ta bort "${w.name}"? Funktionen eller enheten den visade finns inte längre.`)) onRemoveEntry(w.key);
+      return;
+    }
+    if (GROUPS[w.kind]) return setTimelineEditor({ group: w.kind, name: w.name });
+    if (w.kind === 'link') return setLinkEditor({ key: w.key });
+    setEditor({ kind: w.kind, obj: w.obj, base: w.baseObj || w.obj, extra: !!w.extra, widgetType: w.type, key: w.key });
+  };
 
   const onDrop = (targetKey) => {
     if (!dragKey || dragKey === targetKey) return setDragKey(null);
@@ -228,6 +336,17 @@ export default function Dashboard({ iid }) {
         </div>
       </div>
 
+      {(pages.length > 1 || editing) && (
+        <PageTabs
+          iid={iid}
+          pages={pages}
+          current={page.id}
+          editing={editing}
+          onAdd={() => setPageEditor({ id: null })}
+          onEdit={() => setPageEditor({ id: page.id })}
+          onMove={(step) => movePage(page.id, step)}
+        />
+      )}
       {editing && <div className="info-box">Redigeringsläge. Dra i en widget för att flytta den, klicka på kugghjulet för att ändra den. Allt sparas direkt i IoT Open.</div>}
       {saveError && <div className="error-box">{saveError}</div>}
       {error && inst && <div className="error-box">Kunde inte läsa om installationen: {errText(error)}</div>}
@@ -236,7 +355,7 @@ export default function Dashboard({ iid }) {
         <p className="muted">Läser installationen…</p>
       ) : !shown.length ? (
         <div className="empty">
-          <h2>Inga widgets ännu</h2>
+          <h2>{widgets.length ? 'Inga widgets på den här sidan' : 'Inga widgets ännu'}</h2>
           <p className="muted">
             En enhet eller funktion visas när den har metadata <code>{OBJ_META.widget}</code>, till exempel <code>value</code>, <code>chart</code>, <code>gauge</code>, <code>switch</code>, <code>status</code> eller <code>card</code>.
           </p>
@@ -300,6 +419,15 @@ export default function Dashboard({ iid }) {
                   {!w.hidden && editing && w.hiddenFunctions?.length > 0 && <span className="badge">{w.hiddenFunctions.length} dolda</span>}
                   {editing && (
                     <>
+                      {pages.length > 1 && (
+                        <select className="page-move" value={page.id} onChange={(e) => moveToPage(w, e.target.value)} aria-label={`Sida för ${w.name}`} title="Flytta till en annan sida">
+                          {pages.map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.title}
+                            </option>
+                          ))}
+                        </select>
+                      )}
                       <span className="grip" title="Dra för att flytta">
                         <Icon name="grip" size={16} />
                       </span>
@@ -345,11 +473,18 @@ export default function Dashboard({ iid }) {
           kind={editor.kind}
           obj={editor.obj}
           isNew={editor.isNew}
+          extra={editor.extra}
           widgetType={editor.widgetType}
           layoutEntry={editor.isNew ? { suggested: editor.type || suggestType(editor.kind, editor.obj) } : layout.widgets[editor.key] || {}}
           onClose={() => setEditor(null)}
-          onSave={(meta, params) => onSaveWidget(editor.kind, editor.obj, editor.isNew ? null : editor.widgetType, meta, params)}
-          onRemove={() => onRemoveWidget(editor.kind, editor.obj, editor.widgetType)}
+          onSave={(meta, params) =>
+            editor.extra
+              ? onSaveExtra(editor.key, editor.kind, editor.base, meta, params)
+              : editor.isNew && widgetTypes(editor.obj).includes(meta.widget)
+                ? onSaveExtra(null, editor.kind, editor.obj, meta, params)
+                : onSaveWidget(editor.kind, editor.obj, editor.isNew ? null : editor.widgetType, meta, params)
+          }
+          onRemove={() => (editor.extra ? onRemoveEntry(editor.key) : onRemoveWidget(editor.kind, editor.obj, editor.widgetType))}
         />
       )}
       {timelineEditor && raw && (
@@ -367,9 +502,19 @@ export default function Dashboard({ iid }) {
       {linkEditor && (
         <LinkEditor
           entry={linkEditor.key ? layout.widgets[linkEditor.key] : null}
+          pages={pages}
           onClose={() => setLinkEditor(null)}
           onSave={(params) => onSaveLink(linkEditor.key, params)}
           onRemove={() => onRemoveLink(linkEditor.key)}
+        />
+      )}
+      {pageEditor && (
+        <PageEditor
+          page={pageEditor.id ? pages.find((p) => p.id === pageEditor.id) : null}
+          canRemove={pages.length > 1}
+          onClose={() => setPageEditor(null)}
+          onSave={(values) => onSavePage(pageEditor.id, values)}
+          onRemove={() => onRemovePage(pageEditor.id)}
         />
       )}
       {settings && inst && (

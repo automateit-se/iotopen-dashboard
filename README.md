@@ -162,6 +162,10 @@ The dashboard also reads IoT Open's standard function metadata ([meta keys](http
 
 **Several widgets per function.** `dashboard.widget = switch,button` shows the same function as both a switch and a push button. Name, icon, limits and states are shared; size, order and colour are per widget. With several widgets the colour is stored per widget in the layout file, and `dashboard.color` is the fallback. Removing one widget takes its type out of the list.
 
+**Extra widgets of the same type.** A function can also get several widgets of the same type, e.g. four push buttons on one function that send 10, 20, 73 and 94. Pick the function again in *Add widget* and choose a type it already has: the new widget is stored only in the layout file under `x:<n>` with `type` and `ref` (`f:<function id>` or `d:<device id>`). Its own `label`, `icon`, `color`, `press`, `release`, `press_msg`, `release_msg`, `on_msg`, `off_msg` and `topic` are laid over the function's metadata, so name, icon, colour and control settings apply only to that widget, while limits and states are still read from the function. If the function is deleted in IoT Open the widget is shown as *Saknas* in edit mode and can be removed.
+
+**Pages.** The dashboard can be split into pages, e.g. *Energi* or *Omsorg*, shown as tabs above the widgets. In edit mode *Ny sida* creates a page and the cog edits the current one: name, icon and its own base colours (empty = the installation's colours). The arrows move the page left or right. Each page has its own address, `#/i/<installation id>/p/<page id>`, so it can be bookmarked; the first page is `#/i/<installation id>`. A widget is moved to another page with the page menu in its header in edit mode. Removing a page moves its widgets to the first page. A link button can go to a page instead of a web address (*Knappen går till → Sida i dashboarden*). Pages are stored in the layout file, so they apply to everyone who opens the installation.
+
 *Add widget* (*Lägg till widget*) lists all functions and the devices without a card, grouped per device; a function that already has widgets is marked with its types and can get another one: click a device to open it and pick one of its functions, or the whole device as a card. Search shows only the devices with a matching function (or a matching name). The miniatures of the widget types narrow the list to what fits, e.g. *Brytare* shows only functions with `topic_write` and on/off states.
 
 **IoT Open is the master.** An object with `visible = "0"` or `"false"` is hidden everywhere in the dashboard: widgets, card rows, timelines, graphs and the *Add widget* lists. In edit mode hidden widgets stay visible, dimmed and marked *Hidden* (*Dold*). A missing `visible` means visible.
@@ -171,7 +175,7 @@ The dashboard also reads IoT Open's standard function metadata ([meta keys](http
 - **value**: the latest value, formatted with the function's `format` and `unit`. Discrete values use the `state_<x>`/`text_<x>` pairs, e.g. `state_closed = 0`, `text_closed = Closed`. With `dashboard.color_<x>` the whole tile is filled with the colour of the current state, and with height 0.5 it becomes a **banner**, e.g. across the top of the dashboard: `state_armed = 2`, `text_armed = Larmat`, `dashboard.color_armed = #dc2626`. The widget editor has a table for these states (value, text, colour).
 - **status**: like *value*, plus a dot showing the state (coloured when active – on, open, movement – grey otherwise, or the state's `dashboard.color_<x>`). Best for doors, alarms and motion.
 - **button** (*Tryckknapp*): a momentary push button, e.g. a door bell. Sends `dashboard.press` (default 1) to `topic_write` when pressed and, if set, `dashboard.release` when released. Works with mouse, touch and keyboard. Under *Avancerat* in the editor a switch or button can also send a message (`msg`) with the value and publish to another of the function's topics, or a topic of your own.
-- **Link button (www)**: a button that opens another web page (http/https only). Created with *Add widget → New link button* (*Ny länkknapp (www)*). It has no device or function behind it, so it is stored only in the layout file under `u:<n>` (`url`, `label`, `newTab`, `icon`, `color`).
+- **Link button**: a button that opens another web page (http/https only) or another page of the dashboard. Created with *Add widget → New link button* (*Ny länkknapp*). It has no device or function behind it, so it is stored only in the layout file under `u:<n>` (`url` or `target_page`, `label`, `newTab`, `icon`, `color`).
 - **switch**: a toggle that publishes the "on"/"off" state value (`state_on`/`state_off`, or the matching pair, default 1/0) to `topic_write`, or `topic_write_onoff` when present.
 - **number**: publishes a number to `topic_write`. With `min`/`max` it becomes a slider (e.g. a dimmer 0–100); with `topic_write_onoff` an on/off toggle is added.
 - **gauge**: a half circle between `min` and `max` (from the layout file).
@@ -242,12 +246,19 @@ Timelines always read raw data, since averaging on/off states would hide events.
     "t:Events": { "order": 4, "w": 8, "h": 2, "hours": 24, "min_width": 1, "series": { "120": "#dc2626" } },
     "c:Temperatures": { "order": 5, "w": 8, "h": 3, "hours": 168, "aggr": "avg" },
     "f:125": { "order": 6, "w": 8, "h": 0.5 },
-    "u:1": { "order": 7, "w": 2, "h": 1, "url": "https://www.example.com/", "label": "Weather", "newTab": true }
-  }
+    "u:1": { "order": 7, "w": 2, "h": 1, "url": "https://www.example.com/", "label": "Weather", "newTab": true },
+    "u:2": { "order": 8, "w": 2, "h": 1, "target_page": "energi", "label": "Energi" },
+    "x:1": { "order": 9, "w": 1, "h": 1, "type": "button", "ref": "f:108", "label": "Scen 2", "press": 20 },
+    "f:130": { "order": 0, "w": 4, "h": 2, "page": "energi" }
+  },
+  "pages": [
+    { "id": "start", "title": "Start" },
+    { "id": "energi", "title": "Energi", "icon": "bolt", "theme": { "dashboard.color_primary": "#16a34a" } }
+  ]
 }
 ```
 
-Keys are `f:<function id>`, `d:<device id>`, `t:<timeline name>`, `c:<graph name>`, `k:<map name>` or `u:<n>` (link button). With several types in `dashboard.widget` the first type uses `f:<id>` and the others `f:<id>:<type>`, e.g. `f:108:button`. `w` is the width in columns of 8 (1–8) and `h` the height in rows; `h = 0.5` (half a row) works for value, status, switch, button and link widgets. The grid has 8 columns on wide screens, 6 and 4 on smaller ones and 2 on phones, so `w = 1` puts two small widgets side by side on a phone. Files with `"version": 1` (4 columns) are converted automatically (widths doubled) and saved as version 2 the next time the layout changes.
+Keys are `f:<function id>`, `d:<device id>`, `t:<timeline name>`, `c:<graph name>`, `k:<map name>`, `u:<n>` (link button) or `x:<n>` (extra widget of a type the function already has). `page` is the id of the page the widget is on; without it the widget is on the first page. `pages` lists the pages in tab order (`id`, `title`, `icon` and `theme` with the page's own colours); without it the dashboard has one page. With several types in `dashboard.widget` the first type uses `f:<id>` and the others `f:<id>:<type>`, e.g. `f:108:button`. `w` is the width in columns of 8 (1–8) and `h` the height in rows; `h = 0.5` (half a row) works for value, status, switch, button and link widgets. The grid has 8 columns on wide screens, 6 and 4 on smaller ones and 2 on phones, so `w = 1` puts two small widgets side by side on a phone. Files with `"version": 1` (4 columns) are converted automatically (widths doubled) and saved as version 2 the next time the layout changes.
 
 | Parameter    | Applies to                   | Meaning                                                                   |
 |--------------|------------------------------|---------------------------------------------------------------------------|
@@ -258,6 +269,9 @@ Keys are `f:<function id>`, `d:<device id>`, `t:<timeline name>`, `c:<graph name
 | `color`      | timeline, multi-series graph, link button, functions with several widgets | Colour for the whole widget          |
 | `series`     | timeline, multi-series graph | Own colour per row/line: `{ "<function id>": "<colour>" }`                |
 | `url`, `label`, `newTab`, `icon` | link button | Address (http/https), button text (empty = the domain), open in a new tab, icon |
+| `target_page` | link button | Page id the button goes to, instead of `url` |
+| `type`, `ref` | extra widget | Widget type and the function (`f:<id>`) or device (`d:<id>`) it shows |
+| `page` | all widgets | The page the widget is on (empty = the first page) |
 
 Without the file, default sizes are used and widgets are sorted by name.
 
