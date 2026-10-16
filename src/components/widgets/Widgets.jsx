@@ -7,6 +7,7 @@ import { MultiChartWidget } from './MultiChart.jsx';
 import { TrackerWidget } from './Tracker.jsx';
 import { ConsumptionWidget } from './Consumption.jsx';
 import { MediaWidget } from './Media.jsx';
+import { MqttWidget } from './Mqtt.jsx';
 import { statusOf, staleProps } from '../../lib/status.js';
 
 /** CSS class for a value's status (warning/critical colour), '' when OK or none. */
@@ -317,6 +318,7 @@ export const WIDGET_COMPONENTS = {
   number: NumberWidget,
   button: ButtonWidget,
   www: LinkWidget,
+  mqtt: MqttWidget,
   gauge: GaugeWidget,
   chart: ChartWidget,
   card: CardWidget,

@@ -23,11 +23,15 @@
 // 10, 20, 73 and 94. Their name, icon, colour and control settings are their own; limits, states and visible
 // stay on the function.
 //
+// MQTT widgets ("m:<n>") also live only in the layout file: { type: "mqtt", topic, mode, path, … } - they show
+// what arrives on any topic of the installation, see lib/mqttWidget.js.
+//
 // Pages: layout.pages = [{ id, title, icon, theme: { "dashboard.color_*": colour } }]; a widget's layout entry
 // says which page it is on ("page", default the first). No pages = one page without tabs.
 
 import { lynx } from '../api/lynx.js';
 import { stateMap, stateFor } from './format.js';
+import { MQTT_PREFIX } from './mqttWidget.js';
 
 /** A colour from metadata or the layout file, or '' – anything that is not a valid CSS colour is ignored. */
 export const safeColor = (v) => {
@@ -148,10 +152,10 @@ export const DEVICE_WIDGETS = [
   { id: 'card', label: 'Enhetskort', help: 'Alla funktioner som hör till enheten i ett kort.' },
   { id: 'media', label: 'Media', help: 'Mediaspelare: aktuell låt, status, spela/pausa, volym, mute och på/av från enhetens funktioner (…/playing, …/volume, …/mute, …/state, …/power).' },
 ];
-export const WIDGET_LABEL = { ...Object.fromEntries([...FUNCTION_WIDGETS, ...DEVICE_WIDGETS].map((w) => [w.id, w.label])), timeline: 'Tidslinje', multichart: 'Graf (flera)', tracker: 'Karta (Tracker)', www: 'Länkknapp (www)', missing: 'Saknas' };
+export const WIDGET_LABEL = { ...Object.fromEntries([...FUNCTION_WIDGETS, ...DEVICE_WIDGETS].map((w) => [w.id, w.label])), timeline: 'Tidslinje', multichart: 'Graf (flera)', tracker: 'Karta (Tracker)', www: 'Länkknapp (www)', mqtt: 'MQTT', missing: 'Saknas' };
 
 /** Widget types that can be half a row high, e.g. a banner across the top of the dashboard. */
-export const HALF_HEIGHT_TYPES = ['value', 'status', 'switch', 'button', 'www'];
+export const HALF_HEIGHT_TYPES = ['value', 'status', 'switch', 'button', 'www', 'mqtt'];
 export const heightOptions = (type) => [...(HALF_HEIGHT_TYPES.includes(type) ? [[0.5, '0,5 (banner)']] : []), [1, '1'], [2, '2'], [3, '3'], [4, '4']];
 
 /**
@@ -181,6 +185,7 @@ export const DEFAULT_LAYOUT = {
   number: { w: 2, h: 1 },
   button: { w: 2, h: 1 },
   www: { w: 2, h: 1 },
+  mqtt: { w: 2, h: 1, mode: 'value' },
   gauge: { w: 2, h: 2, min: 0, max: 100 },
   chart: { w: 4, h: 2, hours: 24 },
   card: { w: 4, h: 2 },
@@ -367,6 +372,20 @@ export function buildWidgets(raw, layout) {
       hidden: false,
     });
   }
+  // MQTT widgets: only in the layout file, a topic filter instead of an IoT Open object
+  for (const [key, l] of Object.entries(layout.widgets || {})) {
+    if (!key.startsWith(`${MQTT_PREFIX}:`)) continue;
+    out.push({
+      key,
+      kind: 'mqtt',
+      type: 'mqtt',
+      name: String(l.label || '').trim() || String(l.topic || '').trim() || 'MQTT',
+      color: safeColor(l.color),
+      icon: ICON_SET.has(l.icon) ? l.icon : 'signal',
+      layout: { ...DEFAULT_LAYOUT.mqtt, ...l },
+      hidden: false,
+    });
+  }
   // explicit order from the layout file first, then the rest by name
   return out.sort((a, b) => (a.layout.order ?? 1e9) - (b.layout.order ?? 1e9) || a.name.localeCompare(b.name, 'sv'));
 }
@@ -465,7 +484,7 @@ export const newLinkKey = (layout) => {
 /** The functions a widget shows (for status): its own function, a device's functions, or a group's members. */
 export function widgetFunctions(w, raw) {
   if (w.functions) return w.functions;
-  if (w.kind === 'link') return [];
+  if (w.kind === 'link' || w.kind === 'mqtt') return [];
   if (w.kind === 'device') return (raw?.functions || []).filter((f) => String(f.meta?.device_id) === String(w.obj.id) && !isHidden(f));
   return w.obj ? [w.obj] : [];
 }

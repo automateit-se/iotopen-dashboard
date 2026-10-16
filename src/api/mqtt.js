@@ -20,7 +20,7 @@ const remLen = (n) => {
 };
 
 /**
- * createMqtt({ url, token, onMessage(topic, payload), onState(state) })
+ * createMqtt({ url, token, onMessage(topic, payload, { retained, text }), onState(state) })
  *   state: 'connecting' | 'live' | 'offline' | 'failed'
  * returns { setSubscriptions(topics[]), publish(topic, payload) -> boolean, close() }
  */
@@ -90,7 +90,7 @@ export function createMqtt({ url, token, onMessage, onState, keepAlive = 60 }) {
         payload = text.trim();
       }
       if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) payload = { value: payload, msg: '' };
-      onMessage?.(topic, payload, { retained: !!(flags & 1) });
+      onMessage?.(topic, payload, { retained: !!(flags & 1), text });
     }
   };
 

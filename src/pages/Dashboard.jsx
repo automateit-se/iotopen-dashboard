@@ -7,6 +7,9 @@ import { AddWidget } from '../components/AddWidget.jsx';
 import { InstallationSettings } from '../components/InstallationSettings.jsx';
 import { TimelineEditor } from '../components/TimelineEditor.jsx';
 import { LinkEditor } from '../components/LinkEditor.jsx';
+import { MqttEditor } from '../components/MqttEditor.jsx';
+import { mqttShown } from '../components/widgets/Mqtt.jsx';
+import { newMqttKey } from '../lib/mqttWidget.js';
 import { PageEditor, PageTabs } from '../components/Pages.jsx';
 import { worstStatus, staleOf, staleDevice } from '../lib/status.js';
 import { errText } from '../components/Modal.jsx';
@@ -37,6 +40,7 @@ export default function Dashboard({ iid, pageId = '' }) {
   const [adding, setAdding] = useState(false);
   const [timelineEditor, setTimelineEditor] = useState(null); // { group: 'timeline'|'chart', name } – name null = new
   const [linkEditor, setLinkEditor] = useState(null); // { key } – key null = new
+  const [mqttEditor, setMqttEditor] = useState(null); // { key } – key null = new
   const [pageEditor, setPageEditor] = useState(null); // { id } – id null = new
   const [settings, setSettings] = useState(false);
   const [dragKey, setDragKey] = useState(null);
@@ -154,6 +158,7 @@ export default function Dashboard({ iid, pageId = '' }) {
     await writeLayout(iid, { ...layout, widgets: all });
     setEditor(null);
     setLinkEditor(null);
+    setMqttEditor(null);
     await reload({ quiet: true });
   };
 
@@ -206,6 +211,18 @@ export default function Dashboard({ iid, pageId = '' }) {
   };
 
   const onRemoveLink = onRemoveEntry;
+
+  /** MQTT widgets exist only in the layout file; empty settings are left out of the entry. */
+  const onSaveMqtt = async (key, params) => {
+    const all = { ...layout.widgets };
+    widgets.forEach((w, i) => (all[w.key] = { ...(all[w.key] || {}), order: i }));
+    const k = key || newMqttKey(layout);
+    all[k] = { ...(all[k] || { order: widgets.length, ...pageField }), ...params };
+    for (const [p, v] of Object.entries(all[k])) if (v === '' || v === undefined || v === null) delete all[k][p];
+    await writeLayout(iid, { ...layout, widgets: all });
+    setMqttEditor(null);
+    await reload({ quiet: true });
+  };
 
   /** Moves a widget to another page (the first page = no "page" in its entry). */
   const moveToPage = (w, id) => {
@@ -276,6 +293,7 @@ export default function Dashboard({ iid, pageId = '' }) {
     }
     if (GROUPS[w.kind]) return setTimelineEditor({ group: w.kind, name: w.name });
     if (w.kind === 'link') return setLinkEditor({ key: w.key });
+    if (w.kind === 'mqtt') return setMqttEditor({ key: w.key });
     setEditor({ kind: w.kind, obj: w.obj, base: w.baseObj || w.obj, extra: !!w.extra, widgetType: w.type, key: w.key });
   };
 
@@ -380,7 +398,7 @@ export default function Dashboard({ iid, pageId = '' }) {
             const stale = w.kind === 'function' ? staleOf(w.obj, raw) : w.kind === 'device' ? staleDevice(w.obj) : null;
             const st = stale ? null : worstStatus(widgetFunctions(w, raw).filter((f) => !staleOf(f, raw)).map((f) => [f, ctx.valueOf(f)?.value]));
             // value widget: dashboard.color_<state> fills the tile (e.g. a banner "Larmat" in red); a Warning/Critical status wins
-            const fill = w.type === 'value' && !stale && !(st && st.level > 0) ? stateColor(w.obj, ctx.valueOf(w.obj)?.value) : '';
+            const fill = w.type === 'value' && !stale && !(st && st.level > 0) ? stateColor(w.obj, ctx.valueOf(w.obj)?.value) : w.type === 'mqtt' && (w.layout.mode || 'value') === 'value' ? mqttShown(w, ctx)?.color || '' : '';
             const h = Number(w.layout.h) || 1;
             // the button itself carries the name for link and push buttons
             const bare = w.type === 'www' || w.type === 'button';
@@ -462,6 +480,10 @@ export default function Dashboard({ iid, pageId = '' }) {
             setAdding(false);
             setLinkEditor({ key: null });
           }}
+          onNewMqtt={() => {
+            setAdding(false);
+            setMqttEditor({ key: null });
+          }}
           onPick={(c, type) => {
             setAdding(false);
             setEditor({ kind: c.kind, obj: c.obj, isNew: true, type });
@@ -506,6 +528,16 @@ export default function Dashboard({ iid, pageId = '' }) {
           onClose={() => setLinkEditor(null)}
           onSave={(params) => onSaveLink(linkEditor.key, params)}
           onRemove={() => onRemoveLink(linkEditor.key)}
+        />
+      )}
+      {mqttEditor && (
+        <MqttEditor
+          entry={mqttEditor.key ? layout.widgets[mqttEditor.key] : null}
+          raw={raw}
+          mqtt={ctx.mqtt}
+          onClose={() => setMqttEditor(null)}
+          onSave={(params) => onSaveMqtt(mqttEditor.key, params)}
+          onRemove={() => onRemoveEntry(mqttEditor.key)}
         />
       )}
       {pageEditor && (
