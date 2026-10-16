@@ -3,6 +3,7 @@ import { lynx, getToken, normTopic } from '../api/lynx.js';
 import { createMqtt, defaultMqttUrl } from '../api/mqtt.js';
 import { config } from '../api/config.js';
 import { buildWidgets, readLayout, readLogo } from '../lib/dashboard.js';
+import { createMqttStore, mqttFilters } from '../lib/mqttWidget.js';
 
 const POLL_MS = 30000; // REST polling only while MQTT is not live
 const STRUCTURE_DEBOUNCE_MS = 1000; // bulk edits emit many evt/*/updated – reload once
@@ -19,6 +20,7 @@ const EVENTS = [...STRUCTURE_EVENTS, INSTALLATION_EVENT, FILE_EVENT];
  *   + live values over MQTT ("<client_id>/<topic_read>")
  *   + changes over MQTT ("<client_id>/evt/{devicex,functionx,installation,file}/updated") -> re-read only
  *     what changed. Nothing is polled while MQTT is live.
+ *   + the topics of MQTT widgets ("<client_id>/<topic filter>" from the layout file), kept as raw messages.
  */
 export function useInstallation(iid) {
   const [inst, setInst] = useState(null);
@@ -35,6 +37,9 @@ export function useInstallation(iid) {
   const mqttRef = useRef(null);
   const instRef = useRef(null);
   const rawRef = useRef(null);
+  const mqttStore = useRef(null);
+  if (!mqttStore.current) mqttStore.current = createMqttStore();
+  const filtersRef = useRef([]); // topic filters of the MQTT widgets
 
   const bump = useRef(null);
   const scheduleTick = useCallback(() => {
@@ -53,7 +58,8 @@ export function useInstallation(iid) {
       .flatMap((f) => [f.meta?.topic_read, f.meta?.topic_read_onoff])
       .filter(Boolean)
       .map((t) => `${i.client_id}/${normTopic(t)}`);
-    mqttRef.current.setSubscriptions([...topics, ...EVENTS.map((e) => `${i.client_id}/${e}`)]);
+    const widgetTopics = filtersRef.current.map((t) => `${i.client_id}/${t}`);
+    mqttRef.current.setSubscriptions([...topics, ...widgetTopics, ...EVENTS.map((e) => `${i.client_id}/${e}`)]);
   }, []);
 
   /** Reads structure + values (+ layout unless skipped). Newer live values are kept. */
@@ -146,9 +152,11 @@ export function useInstallation(iid) {
   };
 
   const onMessage = useCallback(
-    (fullTopic, payload, { retained = false } = {}) => {
+    (fullTopic, payload, { retained = false, text = '' } = {}) => {
       const m = /^(\d+)\/(.*)$/.exec(fullTopic);
       if (!m || String(instRef.current?.client_id) !== m[1]) return;
+      // MQTT widgets: the raw message, for every topic (a widget may show a function's topic too)
+      if (!m[2].startsWith('evt/')) mqttStore.current.add(m[2], text, { retained, filters: filtersRef.current });
       if (STRUCTURE_EVENTS.includes(m[2])) return debounce('structure', () => load({ withLayout: false, quiet: true }));
       if (m[2] === INSTALLATION_EVENT) return debounce('installation', reloadInstallation);
       if (m[2] === FILE_EVENT) return debounce('file', () => (reloadLayout(), reloadLogo()));
@@ -170,12 +178,20 @@ export function useInstallation(iid) {
   // initial load
   useEffect(() => {
     byTopic.current = new Map();
+    mqttStore.current.clear();
     instRef.current = null;
     rawRef.current = null;
     setInst(null);
     setRaw(null);
     load();
   }, [load]);
+
+  // MQTT widgets: subscribe to their topics whenever the layout changes
+  const filterKey = JSON.stringify(mqttFilters(layout));
+  useEffect(() => {
+    filtersRef.current = JSON.parse(filterKey);
+    updateSubscriptions();
+  }, [filterKey, updateSubscriptions]);
 
   // MQTT connection while this installation is open
   useEffect(() => {
@@ -221,7 +237,17 @@ export function useInstallation(iid) {
   const valueOfTopic = useCallback((topic) => (topic ? byTopic.current.get(normTopic(topic)) || null : null), []);
   const valueOf = useCallback((fn) => valueOfTopic(fn?.meta?.topic_read), [valueOfTopic]);
 
+  /** MQTT widgets: latest message per topic matching a filter, the newest of them, and the recent log. */
+  const mqtt = useMemo(
+    () => ({
+      latest: (filter) => mqttStore.current.latest(filter),
+      newest: (filter) => mqttStore.current.newest(filter),
+      log: (filter, n) => mqttStore.current.log(filter, n),
+    }),
+    [],
+  );
+
   const widgets = useMemo(() => (raw ? buildWidgets(raw, layout) : []), [raw, layout]);
 
-  return { inst, raw, layout, setLayout, widgets, logo, reloadLogo, error, loading, liveState, tick, valueOf, valueOfTopic, onLive, publish, reload: load };
+  return { inst, raw, layout, setLayout, widgets, logo, reloadLogo, error, loading, liveState, tick, valueOf, valueOfTopic, onLive, publish, mqtt, reload: load };
 }

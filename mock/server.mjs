@@ -429,6 +429,23 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
+// topics without a function in IoT Open, for the MQTT widget: a weather station sending its own JSON and
+// production lines publishing their state as bare text (all invented). Retained, like a real device would.
+function rawPublish(full, text) {
+  retained.set(full, text);
+  mqttPublishText(full, text);
+}
+const LINE_STATES = ['running', 'running', 'running', 'stopped', 'fault'];
+function rawSignals() {
+  const t = now();
+  rawPublish('5001/sensor/weather/station', JSON.stringify({ temperature: +(9 + 3 * Math.sin(t / 3000) + Math.random() * 0.3).toFixed(2), humidity: Math.round(70 + 10 * Math.sin(t / 5000)), wind: { speed: +(2 + Math.random() * 4).toFixed(1), direction: Math.round(Math.random() * 359) }, timestamp: t }));
+  const line = 1 + Math.floor(Math.random() * 3);
+  rawPublish(`5001/lab/line/${line}/status`, LINE_STATES[Math.floor(Math.random() * LINE_STATES.length)]);
+}
+for (const n of [1, 2, 3]) retained.set(`5001/lab/line/${n}/status`, 'running');
+setTimeout(rawSignals, 0); // after the MQTT section below has run
+setInterval(rawSignals, 5000);
+
 // ---------------- MQTT over WebSocket (/mqtt) ----------------
 const mqttClients = new Set();
 function wsSend(socket, bytes) {
@@ -475,11 +492,25 @@ function mqttBroadcast(e) {
   mqttPublish(`${e.client_id}/${e.topic}`, { value: e.value, timestamp: e.timestamp, msg: e.msg });
 }
 function mqttPublish(full, obj) {
-  const t = mstr(full);
-  const p = [...Buffer.from(JSON.stringify(obj))];
-  const pkt = [0x30, ...mlen(t.length + p.length), ...t, ...p];
-  for (const c of mqttClients) if (c.authed && c.topics.has(full)) wsSend(c.socket, pkt);
+  mqttPublishText(full, JSON.stringify(obj));
 }
+function mqttPublishText(full, text) {
+  const t = mstr(full);
+  const p = [...Buffer.from(text)];
+  const pkt = [0x30, ...mlen(t.length + p.length), ...t, ...p];
+  for (const c of mqttClients) if (c.authed && subscribed(c, full)) wsSend(c.socket, pkt);
+}
+/** MQTT topic matching like a broker: "+" = one level, "#" = this level and everything below. */
+function topicMatch(filter, topic) {
+  const f = filter.split('/');
+  const t = topic.split('/');
+  for (let i = 0; i < f.length; i++) {
+    if (f[i] === '#') return true;
+    if (i >= t.length || (f[i] !== '+' && f[i] !== t[i])) return false;
+  }
+  return f.length === t.length;
+}
+const subscribed = (c, full) => [...c.topics].some((f) => topicMatch(f, full));
 function handleMqtt(c, type, body) {
   if (type === 1) { // CONNECT – password is the token
     let o = 10; o += 2 + ((body[o] << 8) | body[o + 1]);
@@ -491,8 +522,10 @@ function handleMqtt(c, type, body) {
     const rc = [];
     for (let o = 2; o < body.length;) { const l = (body[o] << 8) | body[o + 1]; c.topics.add(body.subarray(o + 2, o + 2 + l).toString()); o += 3 + l; rc.push(0); }
     wsSend(c.socket, [0x90, 2 + rc.length, body[0], body[1], ...rc]);
+    const fresh = [];
+    for (let o = 2; o < body.length;) { const l = (body[o] << 8) | body[o + 1]; fresh.push(body.subarray(o + 2, o + 2 + l).toString()); o += 3 + l; }
     for (const [full, text] of retained) {
-      if (!c.topics.has(full)) continue;
+      if (!fresh.some((f) => topicMatch(f, full))) continue;
       const t = mstr(full);
       const p = [...Buffer.from(text)];
       wsSend(c.socket, [0x31, ...mlen(t.length + p.length), ...t, ...p]);

@@ -45,7 +45,7 @@ npm run dev               # Vite on :5173, proxies /api and /mqtt to the mock
 LYNX_URL=https://lynx.iotopen.se npm run dev   # against a real instance (PowerShell: $env:LYNX_URL="https://lynx.iotopen.se"; npm run dev)
 ```
 
-The mock (`mock/server.mjs`, no dependencies) implements the parts of the IoT Open API the dashboard uses, including MQTT, `evt/*` events, aggregation and the rejection of empty metadata values. Test logins: `demo@example.com` / `demo`, API key `demo-api-key`, and `twofa@example.com` / `demo` with code `123456`.
+The mock (`mock/server.mjs`, no dependencies) implements the parts of the IoT Open API the dashboard uses, including MQTT (with `+`/`#` wildcards and a few topics without functions for the MQTT widget), `evt/*` events, aggregation and the rejection of empty metadata values. Test logins: `demo@example.com` / `demo`, API key `demo-api-key`, and `twofa@example.com` / `demo` with code `123456`.
 
 > If the project folder is in a synced folder (Nextcloud, OneDrive …), run `npm install` in a copy outside it so `node_modules` is not synced.
 
@@ -176,6 +176,7 @@ The dashboard also reads IoT Open's standard function metadata ([meta keys](http
 - **status**: like *value*, plus a dot showing the state (coloured when active – on, open, movement – grey otherwise, or the state's `dashboard.color_<x>`). Best for doors, alarms and motion.
 - **button** (*Tryckknapp*): a momentary push button, e.g. a door bell. Sends `dashboard.press` (default 1) to `topic_write` when pressed and, if set, `dashboard.release` when released. Works with mouse, touch and keyboard. Under *Avancerat* in the editor a switch or button can also send a message (`msg`) with the value and publish to another of the function's topics, or a topic of your own.
 - **Link button**: a button that opens another web page (http/https only) or another page of the dashboard. Created with *Add widget → New link button* (*Ny länkknapp*). It has no device or function behind it, so it is stored only in the layout file under `u:<n>` (`url` or `target_page`, `label`, `newTab`, `icon`, `color`).
+- **MQTT**: shows what arrives on any topic of the installation, also topics that have no function in IoT Open (e.g. a sensor publishing its own JSON). Created with *Add widget → New MQTT widget* (*Ny MQTT-widget*) and stored only in the layout file as `m:<n>`. The topic is given without the client id; the dashboard puts `<client_id>/` in front, so a widget can only subscribe inside the open installation. `+` matches one level and `#` everything below (`sensor/+/temp`, `lab/#`). Four modes: *Värde* (the latest value, or a field of a JSON message given as a path such as `data.temp` or `values.0`; with unit, decimals and a text and colour per value - the colour fills the tile, so with height 0,5 it becomes a banner), *JSON* (the whole latest message, indented), *Logg* (the latest messages with time, `rows`, at most 50) and *Tabell* (one row per topic with its latest value, for wildcards, at most 50 rows). Without `path`, an IoT Open style message (`{"value": …, "timestamp": …}`) shows its `value`, anything else the whole message. A retained message is shown at once; otherwise the widget says *Väntar på data* until something arrives. There is no history, since IoT Open only keeps history for functions - for a graph, create a function for the topic in IoT Open. The widget is read only (it never publishes), shows everything as plain text, and needs the live MQTT connection (not with `LIVE_UPDATES=false`). What it can read is decided by IoT Open's broker for the signed-in token.
 - **switch**: a toggle that publishes the "on"/"off" state value (`state_on`/`state_off`, or the matching pair, default 1/0) to `topic_write`, or `topic_write_onoff` when present.
 - **number**: publishes a number to `topic_write`. With `min`/`max` it becomes a slider (e.g. a dimmer 0–100); with `topic_write_onoff` an on/off toggle is added.
 - **gauge**: a half circle between `min` and `max` (from the layout file).
@@ -249,6 +250,7 @@ Timelines always read raw data, since averaging on/off states would hide events.
     "u:1": { "order": 7, "w": 2, "h": 1, "url": "https://www.example.com/", "label": "Weather", "newTab": true },
     "u:2": { "order": 8, "w": 2, "h": 1, "target_page": "energi", "label": "Energi" },
     "x:1": { "order": 9, "w": 1, "h": 1, "type": "button", "ref": "f:108", "label": "Scen 2", "press": 20 },
+    "m:1": { "order": 10, "w": 4, "h": 2, "type": "mqtt", "topic": "lab/line/+/status", "mode": "table", "label": "Lines", "states": [{ "value": "fault", "text": "Fault", "color": "#dc2626" }] },
     "f:130": { "order": 0, "w": 4, "h": 2, "page": "energi" }
   },
   "pages": [
@@ -258,7 +260,7 @@ Timelines always read raw data, since averaging on/off states would hide events.
 }
 ```
 
-Keys are `f:<function id>`, `d:<device id>`, `t:<timeline name>`, `c:<graph name>`, `k:<map name>`, `u:<n>` (link button) or `x:<n>` (extra widget of a type the function already has). `page` is the id of the page the widget is on; without it the widget is on the first page. `pages` lists the pages in tab order (`id`, `title`, `icon` and `theme` with the page's own colours); without it the dashboard has one page. With several types in `dashboard.widget` the first type uses `f:<id>` and the others `f:<id>:<type>`, e.g. `f:108:button`. `w` is the width in columns of 8 (1–8) and `h` the height in rows; `h = 0.5` (half a row) works for value, status, switch, button and link widgets. The grid has 8 columns on wide screens, 6 and 4 on smaller ones and 2 on phones, so `w = 1` puts two small widgets side by side on a phone. Files with `"version": 1` (4 columns) are converted automatically (widths doubled) and saved as version 2 the next time the layout changes.
+Keys are `f:<function id>`, `d:<device id>`, `t:<timeline name>`, `c:<graph name>`, `k:<map name>`, `u:<n>` (link button), `m:<n>` (MQTT widget) or `x:<n>` (extra widget of a type the function already has). `page` is the id of the page the widget is on; without it the widget is on the first page. `pages` lists the pages in tab order (`id`, `title`, `icon` and `theme` with the page's own colours); without it the dashboard has one page. With several types in `dashboard.widget` the first type uses `f:<id>` and the others `f:<id>:<type>`, e.g. `f:108:button`. `w` is the width in columns of 8 (1–8) and `h` the height in rows; `h = 0.5` (half a row) works for value, status, switch, button, link and MQTT (value mode) widgets. The grid has 8 columns on wide screens, 6 and 4 on smaller ones and 2 on phones, so `w = 1` puts two small widgets side by side on a phone. Files with `"version": 1` (4 columns) are converted automatically (widths doubled) and saved as version 2 the next time the layout changes.
 
 | Parameter    | Applies to                   | Meaning                                                                   |
 |--------------|------------------------------|---------------------------------------------------------------------------|
@@ -271,6 +273,8 @@ Keys are `f:<function id>`, `d:<device id>`, `t:<timeline name>`, `c:<graph name
 | `url`, `label`, `newTab`, `icon` | link button | Address (http/https), button text (empty = the domain), open in a new tab, icon |
 | `target_page` | link button | Page id the button goes to, instead of `url` |
 | `type`, `ref` | extra widget | Widget type and the function (`f:<id>`) or device (`d:<id>`) it shows |
+| `topic`, `mode`, `path` | MQTT widget | Topic filter without the client id (`+` and `#` allowed), `value` / `json` / `log` / `table`, field of a JSON message (empty = `value` or the whole message) |
+| `unit`, `decimals`, `rows`, `states` | MQTT widget | Unit and decimals of the value, rows in the log (1–50), text and colour per value: `[{ "value", "text", "color" }]` |
 | `page` | all widgets | The page the widget is on (empty = the first page) |
 
 Without the file, default sizes are used and widgets are sorted by name.
@@ -316,6 +320,7 @@ Each installation can replace the header logo with its own PNG (Settings → Log
 ```
 src/api/lynx.js                 IoT Open REST client (fetch, no dependencies)
 src/api/mqtt.js                 MQTT 3.1.1 over WebSocket: subscribe, publish, reconnect
+src/lib/mqttWidget.js           MQTT widget: topic checks, wildcard matching, message store and formatting
 src/api/config.js               runtime configuration (/config.json from nginx)
 src/api/server.js               which IoT Open server is used: default (proxy) or one chosen at sign-in
 src/lib/dashboard.js            metadata schema, widgets, layout file, colours
