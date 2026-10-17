@@ -15,13 +15,13 @@ export const MODES = [
   ['counter', 'Mätarställning (räkneverk)'],
   ['delta', 'Förbrukning per värde (summeras)'],
 ];
-// what a viewer can switch between in the widget (not saved; the editor sets the default)
+// what a viewer can switch between in the widget (not saved; the editor sets the default), longest to the left
 export const VIEWS = [
-  ['hour', 24, '24 h'],
-  ['day', 7, '7 d'],
-  ['day', 30, '30 d'],
-  ['week', 12, '12 v'],
   ['week', 52, '1 år'],
+  ['week', 12, '12 v'],
+  ['day', 30, '30 d'],
+  ['day', 7, '7 d'],
+  ['hour', 24, '24 h'],
 ];
 const DAY = 86400;
 const WEEKDAYS = ['sön', 'mån', 'tis', 'ons', 'tor', 'fre', 'lör'];
@@ -133,12 +133,11 @@ export function ConsumptionWidget({ w, ctx, iid }) {
     let alive = true;
     setData(null);
     setErr('');
-    // hourly values for up to two months, daily beyond that, so even years of readings are a few hundred points
+    // always hourly values: IoT Open's days follow UTC, so daily values would move the bars' boundaries one or
+    // two hours away from local midnight. Three years of hours is about 26 000 values, within the cap.
     const to = Date.now() / 1000;
-    const interval = to - first <= 62 * DAY ? '1h' : '1d';
-    const step = interval === '1h' ? 3600 : DAY;
-    // one interval before the first bucket, so the first bucket has a reading to count from
-    loadBuckets(iid, ctx.inst?.client_id, topic, first - step, to, mode === 'delta' ? 'sum' : 'last', interval)
+    // a meter: also the last reading before the first bucket, so the first bucket has a reading to count from
+    loadBuckets(iid, ctx.inst?.client_id, topic, first, to, mode === 'delta' ? 'sum' : 'last', '1h', { before: mode !== 'delta' })
       .then((d) => alive && setData(d))
       .catch((e) => alive && setErr(e.status === 403 ? 'Saknar behörighet till loggen' : e.message));
     const off = ctx.onLive((e) => {

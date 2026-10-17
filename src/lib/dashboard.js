@@ -26,6 +26,9 @@
 // MQTT widgets ("m:<n>") also live only in the layout file: { type: "mqtt", topic, mode, path, … } - they show
 // what arrives on any topic of the installation, see lib/mqttWidget.js.
 //
+// Text widgets ("n:<n>") also live only in the layout file: { type: "text", text, size, bold, italic, label, … } -
+// a note about the dashboard, e.g. what is relevant right now. Shown as plain text.
+//
 // Pages: layout.pages = [{ id, title, icon, theme: { "dashboard.color_*": colour } }]; a widget's layout entry
 // says which page it is on ("page", default the first). No pages = one page without tabs.
 
@@ -152,10 +155,10 @@ export const DEVICE_WIDGETS = [
   { id: 'card', label: 'Enhetskort', help: 'Alla funktioner som hör till enheten i ett kort.' },
   { id: 'media', label: 'Media', help: 'Mediaspelare: aktuell låt, status, spela/pausa, volym, mute och på/av från enhetens funktioner (…/playing, …/volume, …/mute, …/state, …/power).' },
 ];
-export const WIDGET_LABEL = { ...Object.fromEntries([...FUNCTION_WIDGETS, ...DEVICE_WIDGETS].map((w) => [w.id, w.label])), timeline: 'Tidslinje', multichart: 'Graf (flera)', tracker: 'Karta (Tracker)', www: 'Länkknapp (www)', mqtt: 'MQTT', missing: 'Saknas' };
+export const WIDGET_LABEL = { ...Object.fromEntries([...FUNCTION_WIDGETS, ...DEVICE_WIDGETS].map((w) => [w.id, w.label])), timeline: 'Tidslinje', multichart: 'Graf (flera)', tracker: 'Karta (Tracker)', www: 'Länkknapp (www)', mqtt: 'MQTT', text: 'Text', missing: 'Saknas' };
 
 /** Widget types that can be half a row high, e.g. a banner across the top of the dashboard. */
-export const HALF_HEIGHT_TYPES = ['value', 'status', 'switch', 'button', 'www', 'mqtt'];
+export const HALF_HEIGHT_TYPES = ['value', 'status', 'switch', 'button', 'www', 'mqtt', 'text'];
 export const heightOptions = (type) => [...(HALF_HEIGHT_TYPES.includes(type) ? [[0.5, '0,5 (banner)']] : []), [1, '1'], [2, '2'], [3, '3'], [4, '4']];
 
 /**
@@ -186,6 +189,7 @@ export const DEFAULT_LAYOUT = {
   button: { w: 2, h: 1 },
   www: { w: 2, h: 1 },
   mqtt: { w: 2, h: 1, mode: 'value' },
+  text: { w: 4, h: 1, size: 'm' },
   gauge: { w: 2, h: 2, min: 0, max: 100 },
   chart: { w: 4, h: 2, hours: 24 },
   card: { w: 4, h: 2 },
@@ -386,6 +390,20 @@ export function buildWidgets(raw, layout) {
       hidden: false,
     });
   }
+  // text widgets: only in the layout file, a note with no IoT Open object behind it
+  for (const [key, l] of Object.entries(layout.widgets || {})) {
+    if (!key.startsWith(`${TEXT_PREFIX}:`)) continue;
+    out.push({
+      key,
+      kind: 'text',
+      type: 'text',
+      name: String(l.label || '').trim() || 'Text',
+      color: safeColor(l.color),
+      icon: ICON_SET.has(l.icon) ? l.icon : '',
+      layout: { ...DEFAULT_LAYOUT.text, ...l },
+      hidden: false,
+    });
+  }
   // explicit order from the layout file first, then the rest by name
   return out.sort((a, b) => (a.layout.order ?? 1e9) - (b.layout.order ?? 1e9) || a.name.localeCompare(b.name, 'sv'));
 }
@@ -481,10 +499,27 @@ export const newLinkKey = (layout) => {
   return `${LINK_PREFIX}:${n}`;
 };
 
+// ---- text widgets ----------------------------------------------------------------------------------
+export const TEXT_PREFIX = 'n';
+export const MAX_NOTE = 2000; // longest text stored in a text widget
+export const TEXT_SIZES = [
+  ['s', 'Liten'],
+  ['m', 'Normal'],
+  ['l', 'Stor'],
+  ['xl', 'Mycket stor'],
+];
+
+/** A new, unused key for a text widget. */
+export const newTextKey = (layout) => {
+  let n = 1;
+  while (layout.widgets?.[`${TEXT_PREFIX}:${n}`]) n++;
+  return `${TEXT_PREFIX}:${n}`;
+};
+
 /** The functions a widget shows (for status): its own function, a device's functions, or a group's members. */
 export function widgetFunctions(w, raw) {
   if (w.functions) return w.functions;
-  if (w.kind === 'link' || w.kind === 'mqtt') return [];
+  if (w.kind === 'link' || w.kind === 'mqtt' || w.kind === 'text') return [];
   if (w.kind === 'device') return (raw?.functions || []).filter((f) => String(f.meta?.device_id) === String(w.obj.id) && !isHidden(f));
   return w.obj ? [w.obj] : [];
 }

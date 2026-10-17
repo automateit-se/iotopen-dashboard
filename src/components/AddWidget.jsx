@@ -13,7 +13,7 @@ const THUMBS = ['value', 'chart', 'gauge', 'switch', 'status', 'number', 'button
  * Lists functions and devices, grouped per device; a function that already has widgets can get another type: click a device to open it and pick one of its
  * functions (or the whole device as a card, or as a media player when it has media functions). Search and the miniatures narrow the list.
  */
-export function AddWidget({ raw, valueOf, onPick, onNewGroup, onNewLink, onNewMqtt, onClose }) {
+export function AddWidget({ raw, valueOf, onPick, onNewGroup, onNewLink, onNewMqtt, onNewText, onClose }) {
   const [q, setQ] = useState('');
   const [type, setType] = useState('');
   const [open, setOpen] = useState(() => new Set());
@@ -96,6 +96,9 @@ export function AddWidget({ raw, valueOf, onPick, onNewGroup, onNewLink, onNewMq
         </button>
         <button type="button" className="btn block-left" onClick={onNewMqtt}>
           <Icon name="signal" size={16} /> Ny MQTT-widget som visar data från valfri topic
+        </button>
+        <button type="button" className="btn block-left" onClick={onNewText}>
+          <Icon name="edit" size={16} /> Ny textwidget med information om dashboarden
         </button>
       </div>
       <p className="muted small add-hint">
