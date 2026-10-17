@@ -154,10 +154,18 @@ export async function loadRecent(iid, clientId, topics, from, to, max) {
 /**
  * One topic aggregated server side with a fixed interval (e.g. "1h" or "1d") and method (e.g. "last" or
  * "sum"), for the consumption bars. Falls back to raw values (up to the cap) on IoT Open without aggregation.
+ * With `before`, the last raw value before `from` (up to 400 days back) is put first, so a meter that reports
+ * seldom still has a reading to count the first period from.
  * @returns {Promise<{ points: {ts:number, value:number}[], aggregated: boolean, capped: boolean }>}
  */
-export async function loadBuckets(iid, clientId, topic, from, to, method, interval) {
+export async function loadBuckets(iid, clientId, topic, from, to, method, interval, { before = false } = {}) {
   const base = { from: Math.floor(from), to: Math.ceil(to), topics: [clientId ? `${clientId}/${topic}` : topic] };
+  const prev = before
+    ? lynx
+        .log(iid, { from: base.from - 400 * DAY, to: base.from - 1, topics: base.topics, limit: 1, order: 'desc' })
+        .then((r) => r?.data?.[0] || null)
+        .catch(() => null)
+    : null;
   let res = null;
   let aggregated = true;
   try {
@@ -166,7 +174,8 @@ export async function loadBuckets(iid, clientId, topic, from, to, method, interv
     aggregated = false;
     res = await readAll(iid, base, CAP.numeric);
   }
-  const points = res.data
+  const first = await prev;
+  const points = [...(first ? [first] : []), ...res.data]
     .map((e) => ({ ts: e.timestamp, value: Number(e.value) }))
     .filter((p) => Number.isFinite(p.value))
     .sort((a, b) => a.ts - b.ts);

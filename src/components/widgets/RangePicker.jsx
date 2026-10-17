@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 
+// the buttons, longest range to the left
 export const RANGES = [
-  [1, '1 h'],
-  [24, '24 h'],
-  [168, '7 d'],
-  [720, '30 d'],
   [8760, '1 år'],
+  [720, '30 d'],
+  [168, '7 d'],
+  [24, '24 h'],
+  [1, '1 h'],
 ];
 export const RANGE_OPTIONS = [
   [1, '1 timme'],

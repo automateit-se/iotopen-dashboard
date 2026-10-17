@@ -8,6 +8,7 @@ import { TrackerWidget } from './Tracker.jsx';
 import { ConsumptionWidget } from './Consumption.jsx';
 import { MediaWidget } from './Media.jsx';
 import { MqttWidget } from './Mqtt.jsx';
+import { TextWidget } from './Text.jsx';
 import { statusOf, staleProps } from '../../lib/status.js';
 
 /** CSS class for a value's status (warning/critical colour), '' when OK or none. */
@@ -319,6 +320,7 @@ export const WIDGET_COMPONENTS = {
   button: ButtonWidget,
   www: LinkWidget,
   mqtt: MqttWidget,
+  text: TextWidget,
   gauge: GaugeWidget,
   chart: ChartWidget,
   card: CardWidget,
