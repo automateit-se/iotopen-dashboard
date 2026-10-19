@@ -29,6 +29,9 @@
 // Text widgets ("n:<n>") also live only in the layout file: { type: "text", text, size, bold, italic, label, … } -
 // a note about the dashboard, e.g. what is relevant right now. Shown as plain text.
 //
+// Consumption widgets can show more functions in the same diagram: layout "more" = [function id, …] after the
+// widget's own function, "series" = { function id: colour }. Their bars stand side by side per period.
+//
 // Pages: layout.pages = [{ id, title, icon, theme: { "dashboard.color_*": colour } }]; a widget's layout entry
 // says which page it is on ("page", default the first). No pages = one page without tabs.
 
@@ -521,7 +524,15 @@ export function widgetFunctions(w, raw) {
   if (w.functions) return w.functions;
   if (w.kind === 'link' || w.kind === 'mqtt' || w.kind === 'text') return [];
   if (w.kind === 'device') return (raw?.functions || []).filter((f) => String(f.meta?.device_id) === String(w.obj.id) && !isHidden(f));
+  if (w.type === 'consumption') return consumptionFunctions(w.obj, w.layout, raw);
   return w.obj ? [w.obj] : [];
+}
+
+/** A consumption widget's functions: its own, then those in layout "more" that exist and are not hidden. */
+export function consumptionFunctions(obj, layout, raw) {
+  const ids = Array.isArray(layout?.more) ? [...new Set(layout.more.map(String))] : [];
+  const more = ids.map((id) => (raw?.functions || []).find((f) => String(f.id) === id)).filter((f) => f && f.id !== obj?.id && !isHidden(f));
+  return obj ? [obj, ...more] : more;
 }
 
 /** IoT Open meta "visible" = "false" hides an object everywhere in the dashboard (missing or "true" = shown). */

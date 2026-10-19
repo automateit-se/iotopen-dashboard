@@ -4,7 +4,7 @@ import { Icon, ICON_NAMES } from './icons.jsx';
 import { RANGE_OPTIONS } from './widgets/RangePicker.jsx';
 import { AGGR_METHODS } from '../lib/history.js';
 import { STATUS_META, STATUS_TEXT, parseLimits } from '../lib/status.js';
-import { FUNCTION_WIDGETS, DEVICE_WIDGETS, DEFAULT_LAYOUT, OBJ_META, WIDTH_OPTIONS, HALF_HEIGHT_TYPES, heightOptions, writeTopic, onOffTopics, controlTopic, topicKeys, isHidden, stateColorKey, widgetTypes, WIDGET_LABEL } from '../lib/dashboard.js';
+import { FUNCTION_WIDGETS, DEVICE_WIDGETS, DEFAULT_LAYOUT, OBJ_META, WIDTH_OPTIONS, HALF_HEIGHT_TYPES, heightOptions, writeTopic, onOffTopics, controlTopic, topicKeys, isHidden, stateColorKey, widgetTypes, WIDGET_LABEL, SERIES_COLORS, fnName, safeColor, unitOf } from '../lib/dashboard.js';
 import { stateMap } from '../lib/format.js';
 import { ColorPicker, SeriesColor } from './ColorPicker.jsx';
 import { PERIODS, MODES } from './widgets/Consumption.jsx';
@@ -24,10 +24,65 @@ function newStateKey(row, rows) {
 }
 
 /**
+ * Consumption: more functions whose bars stand next to the widget's own function, e.g. visitors in and out.
+ * The order they are ticked in is the order of the bars; each can get its own colour.
+ */
+function MoreFunctions({ obj, raw, more, setMore, series, setSeries, q, setQ }) {
+  const needle = q.trim().toLowerCase();
+  const list = raw.functions
+    .filter((f) => f.id !== obj.id && f.meta?.topic_read && (!isHidden(f) || more.includes(f.id)))
+    .filter((f) => more.includes(f.id) || !needle || [fnName(f), f.type, f.meta?.topic_read].some((s) => String(s || '').toLowerCase().includes(needle)))
+    .sort((a, b) => (more.includes(b.id) - more.includes(a.id)) || fnName(a).localeCompare(fnName(b), 'sv'));
+  const ids = [obj.id, ...more];
+  const fallbackOf = (f) => safeColor(f.meta?.[OBJ_META.color]) || SERIES_COLORS[Math.max(0, ids.indexOf(f.id)) % SERIES_COLORS.length];
+  const toggle = (id) => setMore((m) => (m.includes(id) ? m.filter((x) => x !== id) : [...m, id]));
+  const units = [...new Set([obj, ...raw.functions.filter((f) => more.includes(f.id))].map((f) => unitOf(f) || '–'))];
+  return (
+    <Field
+      label="Fler funktioner i samma diagram"
+      help="Valfritt. Staplarna för varje period står bredvid varandra, t.ex. besökare in och ut per timme. Alla räknas på samma sätt (mätarställning eller per värde) och delar skala."
+    >
+      <input className="search" placeholder="Sök funktion, typ eller topic…" value={q} onChange={(e) => setQ(e.target.value)} />
+      <ul className="check-list">
+        {more.length > 0 && (
+          <li className="row gap">
+            <SeriesColor value={series[obj.id] || ''} fallback={fallbackOf(obj)} label={fnName(obj)} onChange={(c) => setSeries((s) => ({ ...s, [obj.id]: c }))} />
+            <label className="check grow">
+              <input type="checkbox" checked disabled />
+              <span>
+                {fnName(obj)} <span className="muted small">· widgetens egen funktion</span>
+              </span>
+            </label>
+          </li>
+        )}
+        {list.map((f) => (
+          <li key={f.id} className="row gap">
+            {more.includes(f.id) && <SeriesColor value={series[f.id] || ''} fallback={fallbackOf(f)} label={fnName(f)} onChange={(c) => setSeries((s) => ({ ...s, [f.id]: c }))} />}
+            <label className="check grow">
+              <input type="checkbox" checked={more.includes(f.id)} onChange={() => toggle(f.id)} />
+              <span>
+                {fnName(f)}
+                <span className="muted small">
+                  {' '}
+                  · {f.type}
+                  {unitOf(f) ? ` · ${unitOf(f)}` : ''}
+                </span>
+              </span>
+            </label>
+          </li>
+        ))}
+        {!list.length && <li className="muted small">Inga andra funktioner med topic_read hittades.</li>}
+      </ul>
+      {more.length > 0 && units.length > 1 && <div className="warn-box">Olika enheter ({units.join(', ')}) delar samma skala.</div>}
+    </Field>
+  );
+}
+
+/**
  * Edits one widget (or creates one from a candidate when `isNew`).
  * Simple settings go to the object's metadata, size and technical parameters to the layout file.
  */
-export function WidgetEditor({ kind, obj, widgetType, layoutEntry, isNew, extra = false, onSave, onRemove, onClose }) {
+export function WidgetEditor({ kind, obj, raw, widgetType, layoutEntry, isNew, extra = false, onSave, onRemove, onClose }) {
   const m = obj.meta || {};
   const types = kind === 'device' ? DEVICE_WIDGETS : FUNCTION_WIDGETS;
   // types the object's metadata widgets already have; one more of the same type becomes an extra widget
@@ -56,6 +111,10 @@ export function WidgetEditor({ kind, obj, widgetType, layoutEntry, isNew, extra 
   const [period, setPeriod] = useState(base.period || 'day');
   const [count, setCount] = useState(base.count ?? 7);
   const [mode, setMode] = useState(base.mode || 'counter');
+  // consumption: more functions in the same diagram (layout "more") and a colour per function (layout "series")
+  const [more, setMore] = useState(() => (Array.isArray(base.more) ? base.more.map(Number).filter((id) => id !== obj.id) : []));
+  const [series, setSeries] = useState(() => ({ ...(base.series || {}) }));
+  const [moreQ, setMoreQ] = useState('');
   const [limits, setLimits] = useState(m[STATUS_META.limits] || '');
   const limitsCheck = parseLimits(limits);
   // manual status: '' = none (key removed, limits decide), '0'/'1'/'2' = OK/Warning/Critical – can then be changed in IoT Open
@@ -103,7 +162,11 @@ export function WidgetEditor({ kind, obj, widgetType, layoutEntry, isNew, extra 
         const most = PERIODS.find(([p]) => p === period)[2];
         const n = Math.round(Number(count));
         if (!(n >= 1 && n <= most)) throw new Error(`Antal staplar: 1-${most} för vald period.`);
-        Object.assign(params, { period, count: n, mode });
+        const ids = [obj.id, ...more];
+        const bad = ids.map((id) => series[id]).find((c) => c && !safeColor(c));
+        if (bad) throw new Error(`"${bad}" är ingen giltig CSS-färg.`);
+        const own = more.length ? Object.fromEntries(ids.filter((id) => series[id]).map((id) => [id, series[id]])) : {};
+        Object.assign(params, { period, count: n, mode, more, series: own });
       }
       // states: only for value/status; rows removed in the editor delete their three keys
       let st = {};
@@ -373,6 +436,7 @@ export function WidgetEditor({ kind, obj, widgetType, layoutEntry, isNew, extra 
               ))}
             </select>
           </Field>
+          {raw && kind === 'function' && <MoreFunctions obj={obj} raw={raw} more={more} setMore={setMore} series={series} setSeries={setSeries} q={moreQ} setQ={setMoreQ} />}
         </>
       )}
       {kind === 'function' && (type === 'switch' || type === 'button') && (

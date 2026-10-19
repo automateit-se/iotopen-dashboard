@@ -133,6 +133,10 @@ function signal(iid, topic, gen) {
   // water meter: a counter in litres, logged every hour for more than a year
   const water = dev(iid, 'water_meter', 'Vattenmätare');
   fn(iid, water, 'water_meter', 'Vatten', 'obj/water/1/total', { format: '%.0f l', unit: 'l', 'dashboard.widget': 'consumption', 'dashboard.icon': 'droplet', 'dashboard.color': '#2563eb' });
+  // people counter at an entrance (camera line counters): one counter per direction, a new value per passage
+  const people = dev(iid, 'people_counter', 'Personräknare entré');
+  fn(iid, people, 'counter', 'In', 'obj/people/1/in', { format: '%d', 'dashboard.widget': 'consumption', 'dashboard.icon': 'chart' });
+  fn(iid, people, 'counter', 'Ut', 'obj/people/1/out', { format: '%d' });
   // media players mirrored from Home Assistant: one device, one function per feature (playing, volume, mute, state, power)
   const sonos = dev(iid, 'media_player', 'Sonos Vardagsrum', { 'dashboard.widget': 'media' });
   const mp = 'obj/ha/media_player/vardagsrum';
@@ -242,6 +246,29 @@ for (let ts = Math.floor((now() - 400 * 86400) / 3600) * 3600; ts <= now() - 60;
   water += waterPerHour(ts);
   record(1001, 'obj/water/1/total', ts, Math.round(water), false);
 }
+// people counter: open 08:40-17:00, most arrive in the morning and leave in the afternoon; the camera's counters
+// start from 0 every morning (a restart), which the consumption widget treats as a reset meter
+const people = { in: 0, out: 0 };
+const peopleRate = (dir, h) =>
+  dir === 'in' ? (h >= 9 && h < 11 ? 90 : h >= 11 && h < 14 ? 50 : h >= 14 && h < 16 ? 25 : h === 8 ? 40 : h === 16 ? 8 : 2)
+    : h >= 15 && h < 17 ? 110 : h >= 12 && h < 15 ? 35 : h >= 9 && h < 12 ? 12 : h === 17 ? 30 : 2;
+for (let day = 6; day >= 0; day--) {
+  const d = new Date();
+  d.setDate(d.getDate() - day);
+  d.setHours(8, 40, 0, 0);
+  people.in = people.out = 0;
+  for (let ts = d.getTime() / 1000; ts < Math.min(d.getTime() / 1000 + 9 * 3600, now() - 60); ts += 60) {
+    const h = new Date(ts * 1000).getHours();
+    for (const dir of ['in', 'out']) {
+      const n = Math.round((peopleRate(dir, h) / 60) * (0.4 + Math.random() * 1.2));
+      for (let k = 0; k < n; k++) record(1001, `obj/people/1/${dir}`, ts + k, ++people[dir], false);
+    }
+  }
+}
+setInterval(() => {
+  const h = new Date().getHours();
+  for (const dir of ['in', 'out']) if (Math.random() < Math.max(0.3, peopleRate(dir, h) / 120)) record(1001, `obj/people/1/${dir}`, now(), ++people[dir], true);
+}, 15000);
 setInterval(() => {
   carFix(now(), true);
   boatFix(now(), true);
