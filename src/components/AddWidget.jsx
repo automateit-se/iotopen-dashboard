@@ -9,6 +9,9 @@ import { isMediaDevice } from '../lib/media.js';
 // the miniatures under the hint: what can be made from a function or device
 const THUMBS = ['value', 'chart', 'gauge', 'switch', 'status', 'number', 'button', 'consumption', 'card', 'media'];
 
+// focus the search only with a mouse: on a touch screen it opens the keyboard over half the list
+const FINE_POINTER = typeof window !== 'undefined' && !!window.matchMedia?.('(hover: hover) and (pointer: fine)').matches;
+
 /**
  * Lists functions and devices, grouped per device; a function that already has widgets can get another type: click a device to open it and pick one of its
  * functions (or the whole device as a card, or as a media player when it has media functions). Search and the miniatures narrow the list.
@@ -114,7 +117,7 @@ export function AddWidget({ raw, valueOf, onPick, onNewGroup, onNewLink, onNewMq
         ))}
       </div>
       <div className="row gap wrap">
-        <input className="search grow" placeholder="Sök enhet, funktion, typ eller topic…" value={q} onChange={(e) => setQ(e.target.value)} autoFocus />
+        <input className="search grow" placeholder="Sök enhet, funktion, typ eller topic…" value={q} onChange={(e) => setQ(e.target.value)} autoFocus={FINE_POINTER} />
         {hiddenCount > 0 && (
           <label className="check small" title='Funktioner och enheter med meta visible = "false"'>
             <input type="checkbox" checked={showHidden} onChange={(e) => setShowHidden(e.target.checked)} /> Visa dolda ({hiddenCount})
