@@ -367,7 +367,9 @@ li.stale .val, .tl-label.stale .tl-now { opacity: 0.45; }
 .cons-bars { background: linear-gradient(var(--border), var(--border)) 0 16px / 100% 1px no-repeat; }
 .cons-bars { flex: 1; min-height: 0; display: flex; align-items: stretch; gap: 2px; padding-top: 16px; border-bottom: 1px solid var(--border); }
 .cons-col { position: relative; flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: flex-end; }
-.cons-bar { background: var(--tile-color); border-radius: 3px 3px 0 0; opacity: 0.85; }
+.cons-group { flex: 1; min-height: 0; display: flex; align-items: flex-end; gap: 1px; }
+.cons-bar { flex: 1; min-width: 0; background: var(--tile-color); border-radius: 3px 3px 0 0; opacity: 0.85; }
+.cons-legend { margin: 0; }
 .cons-col.now .cons-bar { opacity: 0.45; }
 .cons-col.on .cons-bar { opacity: 1; }
 .cons-label { position: absolute; top: 100%; left: 50%; transform: translateX(-50%); font-size: 10.5px; white-space: nowrap; }

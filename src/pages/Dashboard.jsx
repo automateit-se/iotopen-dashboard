@@ -514,6 +514,7 @@ export default function Dashboard({ iid, pageId = '' }) {
         <WidgetEditor
           kind={editor.kind}
           obj={editor.obj}
+          raw={raw}
           isNew={editor.isNew}
           extra={editor.extra}
           widgetType={editor.widgetType}
