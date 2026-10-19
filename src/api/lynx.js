@@ -29,6 +29,22 @@ let onUnauthorized = () => {};
 const KIND_KEY = 'dash.tokenKind';
 let tokenKind = storageGet(KIND_KEY) || 'session';
 
+// Direct link / QR code: #token=KEY or #/i/<id>?token=KEY signs in with an API key. It is kept after the #
+// so it never reaches the server (logs, Referer), and is removed from the address bar at once.
+(function tokenFromUrl() {
+  const hash = window.location.hash.replace(/^#/, '');
+  const q = hash.indexOf('?');
+  const [path, query] = /^token=/.test(hash) ? ['/', hash] : q >= 0 ? [hash.slice(0, q), hash.slice(q + 1)] : [hash, ''];
+  const params = new URLSearchParams(query);
+  const t = params.get('token')?.trim();
+  if (!t) return;
+  params.delete('token');
+  const rest = params.toString();
+  window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#${path || '/'}${rest ? '?' + rest : ''}`);
+  // tab only (sessionStorage) and always 'apikey', so signing out never revokes the shared key
+  setToken(t, false, 'apikey');
+})();
+
 export const setUnauthorizedHandler = (fn) => (onUnauthorized = fn);
 export const getToken = () => token;
 /** 'session' (password login, may expire) or 'apikey' (created in IoT Open, does not expire). */
