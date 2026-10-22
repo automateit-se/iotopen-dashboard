@@ -1,6 +1,6 @@
 {
   "name": "iotopen-dashboard",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "private": true,
   "type": "module",
   "description": "Generic dashboard on top of IoT Open (Lynx). Widgets are configured with metadata, layout is a JSON file in the installation.",
@@ -8,7 +8,8 @@
     "dev": "vite",
     "dev:mock": "node mock/server.mjs",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node --test test/*.test.mjs"
   },
   "dependencies": {
     "react": "^19.1.0",

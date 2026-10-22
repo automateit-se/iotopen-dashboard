@@ -105,7 +105,7 @@ export function WidgetEditor({ kind, obj, raw, widgetType, layoutEntry, isNew, e
   const [w, setW] = useState(base.w || 1);
   const [h, setH] = useState(base.h || 1);
   const [min, setMin] = useState(base.min ?? 0);
-  const [max, setMax] = useState(base.max ?? 100);
+  const [max, setMax] = useState(base.max ?? '');
   const [hours, setHours] = useState(base.hours ?? 24);
   const [aggr, setAggr] = useState(base.aggr || 'avg');
   const [period, setPeriod] = useState(base.period || 'day');
@@ -156,7 +156,10 @@ export function WidgetEditor({ kind, obj, raw, widgetType, layoutEntry, isNew, e
     try {
       if (!free(type)) throw new Error(`Funktionen har redan en widget av typen ${WIDGET_LABEL[type] || type}.`);
       const params = { w: Number(w), h: Number(h), color: several ? color.trim() : '' };
-      if (type === 'gauge') Object.assign(params, { min: Number(min), max: Number(max) });
+      if (type === 'gauge') {
+        if (max !== '' && !(Number(max) > Number(min))) throw new Error('Max måste vara större än min, eller tomt för automatiskt.');
+        Object.assign(params, { min: Number(min), max: max === '' ? '' : Number(max) });
+      }
       if (type === 'chart') Object.assign(params, { hours: Number(hours), aggr });
       if (type === 'consumption') {
         const most = PERIODS.find(([p]) => p === period)[2];
@@ -383,8 +386,8 @@ export function WidgetEditor({ kind, obj, raw, widgetType, layoutEntry, isNew, e
           <Field label="Min">
             <input type="number" value={min} onChange={(e) => setMin(e.target.value)} />
           </Field>
-          <Field label="Max">
-            <input type="number" value={max} onChange={(e) => setMax(e.target.value)} />
+          <Field label="Max" help="Tomt = automatiskt: funktionens min/max i IoT Open, 100 för procent, annars ett jämnt tal över värdet (911 ger 1000).">
+            <input type="number" value={max} onChange={(e) => setMax(e.target.value)} placeholder="automatiskt" />
           </Field>
         </div>
       )}

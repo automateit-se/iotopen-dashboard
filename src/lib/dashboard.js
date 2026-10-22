@@ -193,7 +193,7 @@ export const DEFAULT_LAYOUT = {
   www: { w: 2, h: 1 },
   mqtt: { w: 2, h: 1, mode: 'value' },
   text: { w: 4, h: 1, size: 'm' },
-  gauge: { w: 2, h: 2, min: 0, max: 100 },
+  gauge: { w: 2, h: 2, min: 0, max: '' }, // empty max: automatic
   chart: { w: 4, h: 2, hours: 24 },
   card: { w: 4, h: 2 },
   media: { w: 4, h: 2 },

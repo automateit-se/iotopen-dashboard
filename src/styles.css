@@ -298,6 +298,7 @@ li.stale .val, .tl-label.stale .tl-now { opacity: 0.45; }
 .gauge path { fill: none; stroke-width: 9; stroke-linecap: round; }
 .gauge .track { stroke: var(--surface-2); }
 .gauge .fill { stroke: var(--tile-color); transition: stroke-dasharray 0.4s; }
+.gauge.over .fill { stroke-dasharray: 4 3 !important; }
 .gauge-scale { width: 100%; max-width: 220px; }
 
 .w-chart { display: flex; flex-direction: column; gap: 6px; height: 100%; padding-top: 4px; }
