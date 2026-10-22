@@ -5,6 +5,7 @@ import { loadHistory, aggrLabel } from '../../lib/history.js';
 import { fnName, OBJ_META, SERIES_COLORS, SERIES_COLORS_DARK, safeColor } from '../../lib/dashboard.js';
 import { RangePicker, ZoomSurface, useTimeWindow, fmtAxis, fmtWhen } from './RangePicker.jsx';
 import { statusOf, staleProps } from '../../lib/status.js';
+import { chartScale } from '../../lib/scale.js';
 
 const stClass = (fn, value) => {
   const s = statusOf(fn, value);
@@ -86,11 +87,8 @@ export function MultiChartWidget({ w, ctx, iid, single = false }) {
   const scale = useMemo(() => {
     if (!hist) return null;
     const ys = [...hist.byTopic.values()].flatMap((p) => p.filter((x) => x.ts >= t0 && x.ts <= t1).map((x) => x.value));
-    if (!ys.length) return null;
-    let lo = Math.min(...ys);
-    let hi = Math.max(...ys);
-    const pad = (hi - lo) * 0.08 || 1;
-    return { lo: lo - pad, hi: hi + pad };
+    // round numbers, and not below zero for values that never are (a counter)
+    return chartScale(ys);
   }, [hist, t0, t1]);
 
   const X = (t) => ((t - t0) / span) * 300;

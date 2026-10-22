@@ -10,6 +10,7 @@ import { MediaWidget } from './Media.jsx';
 import { MqttWidget } from './Mqtt.jsx';
 import { TextWidget } from './Text.jsx';
 import { statusOf, staleProps } from '../../lib/status.js';
+import { gaugeRange } from '../../lib/scale.js';
 
 /** CSS class for a value's status (warning/critical colour), '' when OK or none. */
 export const stClass = (fn, value) => {
@@ -251,15 +252,16 @@ export function MissingWidget() {
 // ---- gauge ---------------------------------------------------------------------------------
 export function GaugeWidget({ w, ctx }) {
   const v = ctx.valueOf(w.obj);
-  const min = Number(w.layout.min ?? 0);
-  const max = Number(w.layout.max ?? 100);
+  // an empty max is automatic: a round number above the value, so a growing counter still fits
+  const { min, max } = gaugeRange(w.layout, v?.value, { range: rangeOf(w.obj), percent: /%/.test(String(w.obj?.meta?.format || w.obj?.meta?.unit || '')) });
   const n = Number(v?.value);
   const frac = Number.isFinite(n) && max > min ? Math.min(1, Math.max(0, (n - min) / (max - min))) : 0;
+  const over = Number.isFinite(n) && (n > max || n < min);
   const r = 40;
   const len = Math.PI * r;
   return (
     <div className="w-gauge">
-      <svg viewBox="0 0 100 58" className="gauge">
+      <svg viewBox="0 0 100 58" className={`gauge${over ? ' over' : ''}`}>
         <path d="M10 50 A40 40 0 0 1 90 50" className="track" />
         <path d="M10 50 A40 40 0 0 1 90 50" className="fill" style={{ strokeDasharray: `${len * frac} ${len}` }} />
       </svg>
@@ -267,7 +269,7 @@ export function GaugeWidget({ w, ctx }) {
       <div className="row between small muted gauge-scale">
         <span>{min}</span>
         <span>{formatAge(v?.timestamp)}</span>
-        <span>{max}</span>
+        <span title={over ? 'Värdet ligger utanför mätarens skala' : undefined}>{max}</span>
       </div>
     </div>
   );
