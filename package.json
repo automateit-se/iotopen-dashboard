@@ -2,6 +2,7 @@
   "name": "iotopen-dashboard",
   "version": "0.9.1",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "description": "Generic dashboard on top of IoT Open (Lynx). Widgets are configured with metadata, layout is a JSON file in the installation.",
   "scripts": {

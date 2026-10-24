@@ -342,3 +342,6 @@ mock/server.mjs                 dependency-free mock of IoT Open (REST + MQTT) f
 ```
 
 Runtime dependencies: only `react` and `react-dom`.
+## License
+
+MIT, see [LICENSE](LICENSE).
