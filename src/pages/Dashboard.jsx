@@ -12,10 +12,12 @@ import { TextEditor } from '../components/TextEditor.jsx';
 import { mqttShown } from '../components/widgets/Mqtt.jsx';
 import { newMqttKey } from '../lib/mqttWidget.js';
 import { PageEditor, PageTabs } from '../components/Pages.jsx';
+import { useBackground } from '../context/useBackground.js';
+import { backgroundOf } from '../lib/background.js';
 import { worstStatus, staleOf, staleDevice } from '../lib/status.js';
 import { errText } from '../components/Modal.jsx';
 import { Icon } from '../components/icons.jsx';
-import { INST_META, OBJ_META, GROUPS, WIDGET_LABEL, THEME_META, EXTRA_FIELDS, applyTheme, isAdmin, writeLayout, writeObjectMeta, suggestType, widgetFunctions, fnName, stateColor, isLight, newLinkKey, newExtraKey, newTextKey, widgetTypes, widgetKey, keyOf, pagesOf, pageOfWidget, newPageId } from '../lib/dashboard.js';
+import { INST_META, OBJ_META, GROUPS, WIDGET_LABEL, THEME_META, EXTRA_FIELDS, applyTheme, isAdmin, writeLayout, writeObjectMeta, suggestType, widgetFunctions, fnName, stateColor, isLight, newLinkKey, newExtraKey, newTextKey, widgetTypes, widgetKey, keyOf, pagesOf, pageOfWidget, newPageId, writeBackground } from '../lib/dashboard.js';
 
 const LIVE_LABEL = { live: 'Live', connecting: 'Ansluter…', offline: 'Polling', failed: 'Polling', off: 'Polling' };
 
@@ -58,6 +60,10 @@ export default function Dashboard({ iid, pageId = '' }) {
   // a new widget lands on the page being edited (nothing stored for the first page)
   const pageField = page.id === pages[0].id ? {} : { page: page.id };
   const title = inst?.meta?.[INST_META.title] || inst?.name || `Installation ${iid}`;
+  // background image of the page (file dashboard-bg-<page>.jpg); with one, the widgets turn to glass
+  const bg = backgroundOf(page);
+  const bgUrl = useBackground(iid, page.id, !!bg, layout);
+  const glass = !!(bg && bgUrl);
 
   useEffect(() => {
     document.title = title;
@@ -249,22 +255,27 @@ export default function Dashboard({ iid, pageId = '' }) {
     saveLayout(next);
   };
 
-  /** Pages: title, icon and own colours; a removed page's widgets go to the first page. */
-  const onSavePage = async (id, values) => {
+  /**
+   * Pages: title, icon, own colours and background; a removed page's widgets go to the first page. `image` is a
+   * new background image (Blob), null to remove it, undefined to keep it; it is written before the layout.
+   */
+  const onSavePage = async (id, values, image) => {
     const list = layout.pages?.length ? [...layout.pages] : [{ ...pages[0] }];
-    let target = id;
+    const target = id || newPageId(values.title, list);
+    if (image !== undefined) await writeBackground(iid, target, image);
     if (id) list.splice(list.findIndex((p) => p.id === id), 1, { ...list.find((p) => p.id === id), ...values });
-    else {
-      target = newPageId(values.title, list);
-      list.push({ id: target, ...values });
+    else list.push({ id: target, ...values });
+    for (const p of list) {
+      if (p.theme && !Object.keys(p.theme).length) delete p.theme;
+      if (!p.background) delete p.background;
     }
-    for (const p of list) if (p.theme && !Object.keys(p.theme).length) delete p.theme;
     await saveLayout({ ...layout, pages: list });
     setPageEditor(null);
     navigate(target);
   };
 
   const onRemovePage = async (id) => {
+    if (backgroundOf(pages.find((p) => p.id === id))) await writeBackground(iid, id, null);
     const list = (layout.pages || []).filter((p) => p.id !== id);
     const all = { ...layout.widgets };
     for (const [k, e] of Object.entries(all)) {
@@ -337,7 +348,12 @@ export default function Dashboard({ iid, pageId = '' }) {
   }
 
   return (
-    <div className="page">
+    <div className={`page ${glass ? 'has-bg' : ''}`}>
+      {glass && (
+        <div className={`page-bg ${bg.blur ? 'blur' : ''}`} style={{ '--bg-dim': bg.dim / 100 }} aria-hidden="true">
+          <div style={{ backgroundImage: `url("${bgUrl}")` }} />
+        </div>
+      )}
       <div className="page-head">
         <div>
           <a href="#/" className="back">
@@ -407,7 +423,7 @@ export default function Dashboard({ iid, pageId = '' }) {
           )}
         </div>
       ) : (
-        <div className="grid" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
+        <div className={`grid ${glass ? `glass ${bg.glass ? 'frost' : ''}` : ''}`} style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, ...(glass ? { '--glass-alpha': bg.opacity / 100 } : {}) }}>
           {shown.map((w) => {
             const C = WIDGET_COMPONENTS[w.type];
             // silent (metric_monitor.status > 0): greyed out; its stale value does not drive Warning/Critical
@@ -572,9 +588,10 @@ export default function Dashboard({ iid, pageId = '' }) {
       {pageEditor && (
         <PageEditor
           page={pageEditor.id ? pages.find((p) => p.id === pageEditor.id) : null}
+          bgUrl={pageEditor.id === page.id ? bgUrl : null}
           canRemove={pages.length > 1}
           onClose={() => setPageEditor(null)}
-          onSave={(values) => onSavePage(pageEditor.id, values)}
+          onSave={(values, image) => onSavePage(pageEditor.id, values, image)}
           onRemove={() => onRemovePage(pageEditor.id)}
         />
       )}

@@ -8,6 +8,7 @@ import { FUNCTION_WIDGETS, DEVICE_WIDGETS, DEFAULT_LAYOUT, OBJ_META, WIDTH_OPTIO
 import { stateMap } from '../lib/format.js';
 import { ColorPicker, SeriesColor } from './ColorPicker.jsx';
 import { PERIODS, MODES } from './widgets/Consumption.jsx';
+import { SUMMARY_PERIODS, summaryPeriods } from '../lib/periods.js';
 
 /** state_<key> name for a new row: from the text (a-z, 0-9, _), else the value; unique among the rows. */
 function newStateKey(row, rows) {
@@ -111,6 +112,8 @@ export function WidgetEditor({ kind, obj, raw, widgetType, layoutEntry, isNew, e
   const [period, setPeriod] = useState(base.period || 'day');
   const [count, setCount] = useState(base.count ?? 7);
   const [mode, setMode] = useState(base.mode || 'counter');
+  // summary: which periods it shows
+  const [sumPeriods, setSumPeriods] = useState(() => summaryPeriods(base.periods).map(([id]) => id));
   // consumption: more functions in the same diagram (layout "more") and a colour per function (layout "series")
   const [more, setMore] = useState(() => (Array.isArray(base.more) ? base.more.map(Number).filter((id) => id !== obj.id) : []));
   const [series, setSeries] = useState(() => ({ ...(base.series || {}) }));
@@ -170,6 +173,10 @@ export function WidgetEditor({ kind, obj, raw, widgetType, layoutEntry, isNew, e
         if (bad) throw new Error(`"${bad}" är ingen giltig CSS-färg.`);
         const own = more.length ? Object.fromEntries(ids.filter((id) => series[id]).map((id) => [id, series[id]])) : {};
         Object.assign(params, { period, count: n, mode, more, series: own });
+      }
+      if (type === 'sum') {
+        if (!sumPeriods.length) throw new Error('Välj minst en period.');
+        Object.assign(params, { periods: SUMMARY_PERIODS.map(([id]) => id).filter((id) => sumPeriods.includes(id)), mode });
       }
       // states: only for value/status; rows removed in the editor delete their three keys
       let st = {};
@@ -440,6 +447,31 @@ export function WidgetEditor({ kind, obj, raw, widgetType, layoutEntry, isNew, e
             </select>
           </Field>
           {raw && kind === 'function' && <MoreFunctions obj={obj} raw={raw} more={more} setMore={setMore} series={series} setSeries={setSeries} q={moreQ} setQ={setMoreQ} />}
+        </>
+      )}
+      {type === 'sum' && (
+        <>
+          <div className="field">
+            <span>Perioder</span>
+            <div className="period-checks">
+              {SUMMARY_PERIODS.map(([id, label]) => (
+                <label key={id} className="check">
+                  <input type="checkbox" checked={sumPeriods.includes(id)} onChange={(e) => setSumPeriods((l) => (e.target.checked ? [...l, id] : l.filter((x) => x !== id)))} />
+                  <span>{label}</span>
+                </label>
+              ))}
+            </div>
+            <small className="muted">Visas bredvid varandra i den här ordningen. Pågående period räknas fram till nu.</small>
+          </div>
+          <Field label="Funktionen visar" help="Mätarställning: skillnaden mellan avläsningarna blir förbrukningen (ett nollställt räkneverk hanteras).">
+            <select value={mode} onChange={(e) => setMode(e.target.value)}>
+              {MODES.map(([v, l]) => (
+                <option key={v} value={v}>
+                  {l}
+                </option>
+              ))}
+            </select>
+          </Field>
         </>
       )}
       {kind === 'function' && (type === 'switch' || type === 'button') && (

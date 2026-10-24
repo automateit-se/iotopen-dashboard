@@ -54,6 +54,16 @@ const DRAW = {
       <rect x="56" y="27" width="6" height="6" rx="1" className="th-off" />
     </>
   ),
+  sum: (
+    <>
+      {[6, 26, 46].map((x) => (
+        <g key={x}>
+          <rect x={x} y="10" width="12" height="9" rx="2" className="th-fill" />
+          <rect x={x} y="24" width="12" height="3" rx="1.5" className="th-off" />
+        </g>
+      ))}
+    </>
+  ),
   media: (
     <>
       <rect x="8" y="7" width="12" height="12" rx="2" className="th-off" />
