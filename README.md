@@ -287,6 +287,8 @@ Without the file, default sizes are used and widgets are sorted by name.
 
 The dashboard only writes when an admin changes something in edit mode:
 
+IoT Open stores a metadata value as at most 1024 characters of Windows-1252 (MariaDB's `latin1`): Swedish and other West European letters and punctuation such as `€ – “ ” …` work, emoji, arrows and most non-Latin scripts do not. The dashboard checks every value before it writes anything and says what has to change, so a save is never half done.
+
 | Action                        | Write                                                                                        | Undo                                                                            |
 |-------------------------------|----------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------|
 | Add or edit a widget          | `PUT …/functionx/{iid}/{id}/meta/dashboard.*` (or `devicex`) + `dashboard-layout.json`       | Remove the key in Lynx, or *Remove from dashboard* (*Ta bort från dashboarden*) |
