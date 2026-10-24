@@ -6,6 +6,7 @@ import { TimelineWidget } from './Timeline.jsx';
 import { MultiChartWidget } from './MultiChart.jsx';
 import { TrackerWidget } from './Tracker.jsx';
 import { ConsumptionWidget } from './Consumption.jsx';
+import { SummaryWidget } from './Summary.jsx';
 import { MediaWidget } from './Media.jsx';
 import { MqttWidget } from './Mqtt.jsx';
 import { TextWidget } from './Text.jsx';
@@ -315,6 +316,7 @@ export const WIDGET_COMPONENTS = {
   multichart: MultiChartWidget,
   tracker: TrackerWidget,
   consumption: ConsumptionWidget,
+  sum: SummaryWidget,
   value: ValueWidget,
   status: StatusWidget,
   switch: SwitchWidget,

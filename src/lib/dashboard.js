@@ -14,6 +14,7 @@
 //                       dashboard.topic      where switch/button publish: a topic_* key of the function or a topic
 //   Installation file   dashboard-layout.json  order, size and technical parameters per widget
 //                       dashboard-logo.png     logo in the header instead of IoT Open's (no file = default)
+//                       dashboard-bg-<page>.jpg  background image of a page, see lib/background.js
 //
 // Widget keys are "f:<function id>" and "d:<device id>" for the first type in dashboard.widget and
 // "f:<id>:<type>" for the others; link buttons (www) live only in the layout file as "u:<id>".
@@ -32,12 +33,13 @@
 // Consumption widgets can show more functions in the same diagram: layout "more" = [function id, …] after the
 // widget's own function, "series" = { function id: colour }. Their bars stand side by side per period.
 //
-// Pages: layout.pages = [{ id, title, icon, theme: { "dashboard.color_*": colour } }]; a widget's layout entry
-// says which page it is on ("page", default the first). No pages = one page without tabs.
+// Pages: layout.pages = [{ id, title, icon, theme: { "dashboard.color_*": colour }, background: { … } }]; a widget's
+// layout entry says which page it is on ("page", default the first). No pages = one page without tabs.
 
 import { lynx } from '../api/lynx.js';
 import { stateMap, stateFor } from './format.js';
 import { MQTT_PREFIX } from './mqttWidget.js';
+import { backgroundFile } from './background.js';
 import { assertStorable } from './metaValue.js';
 
 /** A colour from metadata or the layout file, or '' – anything that is not a valid CSS colour is ignored. */
@@ -153,6 +155,7 @@ export const FUNCTION_WIDGETS = [
   { id: 'status', label: 'Status', help: 'Av/på-indikator med text_on/text_off.' },
   { id: 'number', label: 'Börvärde / nivå', help: 'Skickar ett tal till topic_write via MQTT. Med min/max i meta blir det ett reglage (t.ex. dimmer).' },
   { id: 'consumption', label: 'Förbrukning', help: 'Staplar per timme, dygn, vecka eller månad från en mätarställning (el, vatten, besökare…). Använder sammanställd data från IoT Open.' },
+  { id: 'sum', label: 'Summa per period', help: 'Förbrukningen idag, denna vecka, denna månad … som stora tal, från en mätarställning eller förbrukning per värde.' },
   { id: 'button', label: 'Tryckknapp', help: 'Fjädrande knapp, t.ex. dörrklocka: skickar ett värde när den trycks ned och (valfritt) ett när den släpps.' },
 ];
 export const DEVICE_WIDGETS = [
@@ -176,7 +179,7 @@ export function fitsType(type, kind, obj) {
   if (type === 'button') return !!controlTopic(obj, writeTopic(obj));
   if (type === 'number') return !!writeTopic(obj);
   if (type === 'status') return isDiscrete(obj);
-  if (type === 'consumption') return !isDiscrete(obj);
+  if (type === 'consumption' || type === 'sum') return !isDiscrete(obj);
   return true;
 }
 
@@ -202,6 +205,7 @@ export const DEFAULT_LAYOUT = {
   multichart: { w: 4, h: 2, hours: 24 },
   tracker: { w: 4, h: 3, hours: 24, points: 200, pair: 5, fade: true },
   consumption: { w: 4, h: 2, period: 'day', count: 7, mode: 'counter' },
+  sum: { w: 4, h: 1, periods: ['today', 'week', 'month'], mode: 'counter' },
 };
 
 /** Series colours for multi-line graphs: profile colours first, then distinct hues. */
@@ -624,6 +628,25 @@ export async function checkLogo(file) {
   const size = { width: bmp.width, height: bmp.height };
   bmp.close();
   return size;
+}
+
+// ---- background images (File API), one per page -------------------------------------------------------------
+
+/** { hash, blob } of a page's background image, null when there is none; blob null when knownHash is current. */
+export async function readBackground(iid, pageId, knownHash) {
+  const f = await findFile(iid, backgroundFile(pageId)).catch(() => null);
+  if (!f) return null;
+  if (f.hash === knownHash) return { hash: f.hash, blob: null };
+  const blob = await (await lynx.downloadFile(f.hash)).blob();
+  return { hash: f.hash, blob: new Blob([blob], { type: 'image/jpeg' }) };
+}
+
+/** Uploads (or replaces) a page's background image; null removes it. */
+export async function writeBackground(iid, pageId, blob) {
+  const name = backgroundFile(pageId);
+  const f = await findFile(iid, name);
+  if (!blob) return f ? lynx.deleteFile(iid, f.id) : null;
+  return f ? lynx.replaceFile(iid, f.id, blob, name) : lynx.uploadFile(iid, blob, name);
 }
 
 /** Writes widget metadata on a function or device. Only changed keys are written; an empty value deletes the key. */
