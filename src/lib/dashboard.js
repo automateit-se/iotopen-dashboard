@@ -40,6 +40,7 @@ import { lynx } from '../api/lynx.js';
 import { stateMap, stateFor } from './format.js';
 import { MQTT_PREFIX } from './mqttWidget.js';
 import { backgroundFile } from './background.js';
+import { assertStorable } from './metaValue.js';
 
 /** A colour from metadata or the layout file, or '' – anything that is not a valid CSS colour is ignored. */
 export const safeColor = (v) => {
@@ -652,6 +653,8 @@ export async function writeBackground(iid, pageId, blob) {
 export async function writeObjectMeta(iid, kind, obj, values) {
   const put = kind === 'device' ? lynx.putDeviceMeta : lynx.putFunctionMeta;
   const del = kind === 'device' ? lynx.deleteDeviceMeta : lynx.deleteFunctionMeta;
+  // checked before anything is written: IoT Open stores at most 1024 Windows-1252 characters per value
+  assertStorable(Object.entries(values).map(([k, v]) => [OBJ_META[k] || k, String(v ?? '').trim()]));
   for (const [k, v] of Object.entries(values)) {
     const key = OBJ_META[k] || k;
     const next = String(v ?? '').trim();
@@ -663,6 +666,7 @@ export async function writeObjectMeta(iid, kind, obj, values) {
 
 /** Same rule for installation metadata. */
 export async function writeInstallationMeta(inst, values) {
+  assertStorable(Object.entries(values).map(([k, v]) => [k, String(v ?? '').trim()]));
   for (const [key, v] of Object.entries(values)) {
     const next = String(v ?? '').trim();
     if (String(inst.meta?.[key] ?? '') === next) continue;
