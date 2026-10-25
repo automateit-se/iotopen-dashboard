@@ -205,7 +205,7 @@ export const DEFAULT_LAYOUT = {
   multichart: { w: 4, h: 2, hours: 24 },
   tracker: { w: 4, h: 3, hours: 24, points: 200, pair: 5, fade: true },
   consumption: { w: 4, h: 2, period: 'day', count: 7, mode: 'counter' },
-  sum: { w: 4, h: 1, periods: ['today', 'week', 'month'], mode: 'counter' },
+  sum: { w: 4, h: 1, periods: ['month', 'week', 'today'], mode: 'counter' },
 };
 
 /** Series colours for multi-line graphs: profile colours first, then distinct hues. */
