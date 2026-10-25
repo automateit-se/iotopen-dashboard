@@ -624,3 +624,10 @@ textarea { resize: vertical; min-height: 80px; }
 .range-row { display: flex; align-items: center; gap: 10px; }
 .range-row input[type='range'] { flex: 1; padding: 0; border: 0; accent-color: var(--accent); }
 .range-row output { min-width: 3.5em; text-align: right; font-variant-numeric: tabular-nums; }
+
+/* ---- local mode (edge app "Local dashboard") ---- */
+.app.kiosk .page { padding-top: 14px; }
+.local-state { margin-right: 10px; font-size: 12px; color: var(--muted); }
+.local-state.warn { color: var(--status-warn-text); font-weight: 600; }
+.topbar-btn { background: transparent; color: var(--topbar-text); border-color: var(--topbar-line, rgba(255, 255, 255, 0.35)); }
+.topbar-btn:hover:not(:disabled) { background: var(--topbar-hover, rgba(255, 255, 255, 0.1)); }

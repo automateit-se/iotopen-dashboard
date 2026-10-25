@@ -1,5 +1,6 @@
 node_modules
 dist
+dist-local
 *.log
 # local notes that may contain credentials
 *Account*.md

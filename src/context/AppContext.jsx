@@ -1,5 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { lynx, getToken, getTokenKind, setToken, setUnauthorizedHandler } from '../api/lynx.js';
+import { appUrl, config } from '../api/config.js';
+import { localLogin } from '../lib/local.js';
 
 const Ctx = createContext(null);
 export const useApp = () => useContext(Ctx);
@@ -8,7 +10,8 @@ export const useApp = () => useContext(Ctx);
 // (see useInstallation).
 export function AppProvider({ children }) {
   const [user, setUser] = useState(null);
-  const [booting, setBooting] = useState(!!getToken());
+  // local mode (edge app): no IoT Open account; the app itself says whether a password is needed
+  const [booting, setBooting] = useState(!!getToken() || !!config.local);
   const [installations, setInstallations] = useState([]);
   const [brandLogo, setBrandLogo] = useState(null); // the open installation's logo (object URL), null = IoT Open
 
@@ -35,7 +38,7 @@ export function AppProvider({ children }) {
   }, [refreshInstallations]);
 
   useEffect(() => {
-    if (!getToken()) return;
+    if (!getToken() && !config.local) return;
     afterLogin()
       .catch(() => signOut(false))
       .finally(() => setBooting(false));
@@ -70,6 +73,20 @@ export function AppProvider({ children }) {
     [afterLogin],
   );
 
+  /**
+   * Local mode: the edge app's PIN (control) or password (everything). The session is kept in this browser, so a
+   * wall screen stays signed in; MQTT picks it up on the next connection, so the page is reloaded for a PIN.
+   */
+  const signInLocal = useCallback(
+    async (secret) => {
+      const token = await localLogin(appUrl('local/login'), secret);
+      setToken(token, true, 'apikey');
+      if (config.local?.access === 'pin') return window.location.reload();
+      return afterLogin();
+    },
+    [afterLogin],
+  );
+
   const signIn2fa = useCallback(
     async (tmpToken, challenge, remember) => {
       const res = await lynx.login2fa(tmpToken, challenge);
@@ -80,8 +97,8 @@ export function AppProvider({ children }) {
   );
 
   const value = useMemo(
-    () => ({ user, booting, signIn, signIn2fa, signInApiKey, signOut, installations, refreshInstallations, brandLogo, setBrandLogo }),
-    [user, booting, signIn, signIn2fa, signInApiKey, signOut, installations, refreshInstallations, brandLogo],
+    () => ({ user, booting, signIn, signIn2fa, signInApiKey, signInLocal, signOut, installations, refreshInstallations, brandLogo, setBrandLogo }),
+    [user, booting, signIn, signIn2fa, signInApiKey, signInLocal, signOut, installations, refreshInstallations, brandLogo],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

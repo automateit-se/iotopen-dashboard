@@ -1,0 +1,37 @@
+# The dashboard as one HTML file for the edge app "Local dashboard" (automateit-se/edge-app-local-dashboard).
+#   pull request / push to main -> built and checked only
+#   release published           -> iotopen-dashboard-local.html is attached to the release
+name: local
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write # attach the file to the release
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Build
+        env:
+          APP_VERSION: ${{ github.event_name == 'release' && github.event.release.tag_name || '' }}
+        run: npm run build:local
+      - name: Attach to the release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ github.event.release.tag_name }}" dist-local/iotopen-dashboard-local.html --clobber --repo "${{ github.repository }}"

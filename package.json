@@ -1,6 +1,6 @@
 {
   "name": "iotopen-dashboard",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -10,7 +10,8 @@
     "dev:mock": "node mock/server.mjs",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node --test test/*.test.mjs"
+    "test": "node --test test/*.test.mjs",
+    "build:local": "node scripts/build-local.mjs"
   },
   "dependencies": {
     "react": "^19.1.0",

@@ -6,6 +6,7 @@ import { Icon } from './components/icons.jsx';
 import Login from './pages/Login.jsx';
 import Installations from './pages/Installations.jsx';
 import Dashboard from './pages/Dashboard.jsx';
+import { CloudState, PinButton, useLocalStatus } from './components/LocalBar.jsx';
 
 /** Keeps a crash in one page from blanking the whole app (and keeps the session). */
 class Boundary extends Component {
@@ -37,9 +38,23 @@ const safeDecode = (s) => {
 function Shell() {
   const { user, booting, signOut, brandLogo } = useApp();
   const path = useRoute();
+  const local = config.local;
+  const localStatus = useLocalStatus();
   if (booting) return <div className="center-screen muted">Laddar…</div>;
   if (!user) return <Login />;
-  const m = /^\/i\/(\d+)(?:\/p\/([^/]+))?/.exec(path);
+  // local mode: one installation, no list of installations
+  const m = /^\/i\/(\d+)(?:\/p\/([^/]+))?/.exec(path) || (local ? [path, String(local.installation)] : null);
+  if (local?.kiosk) {
+    return (
+      <div className="app kiosk">
+        <main>
+          <Boundary key={m[1]}>
+            <Dashboard key={m[1]} iid={Number(m[1])} pageId={m[2] ? safeDecode(m[2]) : ''} />
+          </Boundary>
+        </main>
+      </div>
+    );
+  }
   return (
     <div className="app">
       <header className="topbar">
@@ -48,16 +63,23 @@ function Shell() {
           <span className="app-title">{config.appTitle}</span>
         </a>
         <span className="grow" />
-        <span className="muted small user">{user.email}</span>
-        <button type="button" className="icon-btn" onClick={() => signOut()} title="Logga ut" aria-label="Logga ut">
-          <Icon name="logout" size={18} />
-        </button>
+        {local ? (
+          <PinButton status={localStatus} />
+        ) : (
+          <>
+            <span className="muted small user">{user.email}</span>
+            <button type="button" className="icon-btn" onClick={() => signOut()} title="Logga ut" aria-label="Logga ut">
+              <Icon name="logout" size={18} />
+            </button>
+          </>
+        )}
       </header>
       <main>
         {/* switching page keeps the installation (and its live connection) loaded */}
         <Boundary key={m ? `i${m[1]}` : path}>{m ? <Dashboard key={m[1]} iid={Number(m[1])} pageId={m[2] ? safeDecode(m[2]) : ''} /> : <Installations />}</Boundary>
       </main>
       <footer className="app-foot">
+        {local && <CloudState status={localStatus} />}
         <span className="app-version" title="Dashboardens version">
           v{__APP_VERSION__}
         </span>
