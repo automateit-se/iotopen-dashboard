@@ -78,17 +78,18 @@ export function consumptionPer(buckets, points, mode) {
 }
 
 // ---- summary widget ("Summa per period") -------------------------------------------------------------
-// id: [label in the widget, period, step from the current one]
+// id: [label in the widget, period, step from the current one]. Shown in this order, the oldest to the left and the
+// latest to the right, like the time axis of the other widgets.
 export const SUMMARY_PERIODS = [
-  ['today', 'Idag', 'day', 0],
-  ['yesterday', 'Igår', 'day', -1],
-  ['week', 'Denna vecka', 'week', 0],
-  ['last_week', 'Förra veckan', 'week', -1],
-  ['month', 'Denna månad', 'month', 0],
-  ['last_month', 'Förra månaden', 'month', -1],
   ['year', 'I år', 'year', 0],
+  ['last_month', 'Förra månaden', 'month', -1],
+  ['month', 'Denna månad', 'month', 0],
+  ['last_week', 'Förra veckan', 'week', -1],
+  ['week', 'Denna vecka', 'week', 0],
+  ['yesterday', 'Igår', 'day', -1],
+  ['today', 'Idag', 'day', 0],
 ];
-export const SUMMARY_DEFAULTS = { periods: ['today', 'week', 'month'], mode: 'counter' };
+export const SUMMARY_DEFAULTS = { periods: ['month', 'week', 'today'], mode: 'counter' };
 
 /** The chosen periods (known ids, in the order of SUMMARY_PERIODS), or the default ones. */
 export function summaryPeriods(ids) {

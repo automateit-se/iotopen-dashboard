@@ -36,15 +36,15 @@ test('meter readings: difference per bucket, a reset counts from zero', () => {
 });
 
 test('summary periods: known ids in a fixed order, defaults when none', () => {
-  assert.deepEqual(summaryPeriods(['month', 'today', 'nonsense']).map(([id]) => id), ['today', 'month']);
-  assert.deepEqual(summaryPeriods([]).map(([id]) => id), ['today', 'week', 'month']);
-  assert.deepEqual(summaryPeriods(undefined).map(([id]) => id), ['today', 'week', 'month']);
+  assert.deepEqual(summaryPeriods(['today', 'month', 'nonsense']).map(([id]) => id), ['month', 'today']);
+  assert.deepEqual(summaryPeriods([]).map(([id]) => id), ['month', 'week', 'today']);
+  assert.deepEqual(summaryPeriods(undefined).map(([id]) => id), ['month', 'week', 'today']);
 });
 
 test('summary totals for overlapping periods', () => {
   const now = new Date(2026, 9, 21, 12); // Wednesday
   const ranges = summaryRanges(['today', 'yesterday', 'week', 'month', 'year'], now);
-  assert.deepEqual(ranges.map((r) => r.label), ['Idag', 'Igår', 'Denna vecka', 'Denna månad', 'I år']);
+  assert.deepEqual(ranges.map((r) => r.label), ['I år', 'Denna månad', 'Denna vecka', 'Igår', 'Idag']);
   // a meter read every few hours: 1000 at the end of September, +10 per reading
   const points = [
     { ts: at(new Date(2026, 8, 30, 23)), value: 1000 },
@@ -54,6 +54,6 @@ test('summary totals for overlapping periods', () => {
     { ts: at(new Date(2026, 9, 21, 6)), value: 1040 }, // today
     { ts: at(new Date(2026, 9, 21, 11)), value: 1050 },
   ];
-  assert.deepEqual(summaryTotals(ranges, points, 'counter'), [20, 10, 40, 50, 50]);
+  assert.deepEqual(summaryTotals(ranges, points, 'counter'), [50, 50, 40, 10, 20]);
   assert.deepEqual(summaryTotals(summaryRanges(['last_week'], now), points, 'counter'), [null]);
 });

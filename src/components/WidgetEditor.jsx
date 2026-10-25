@@ -461,7 +461,7 @@ export function WidgetEditor({ kind, obj, raw, widgetType, layoutEntry, isNew, e
                 </label>
               ))}
             </div>
-            <small className="muted">Visas bredvid varandra i den här ordningen. Pågående period räknas fram till nu.</small>
+            <small className="muted">Visas bredvid varandra i den här ordningen, äldst till vänster och senast till höger. Pågående period räknas fram till nu.</small>
           </div>
           <Field label="Funktionen visar" help="Mätarställning: skillnaden mellan avläsningarna blir förbrukningen (ett nollställt räkneverk hanteras).">
             <select value={mode} onChange={(e) => setMode(e.target.value)}>
