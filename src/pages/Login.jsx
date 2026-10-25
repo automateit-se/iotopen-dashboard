@@ -12,7 +12,7 @@ const savedMode = () => {
   }
 };
 
-export default function Login() {
+function CloudLogin() {
   const { signIn, signIn2fa, signInApiKey } = useApp();
   const [mode, setMode] = useState(savedMode); // 'password' | 'apikey'
   const [email, setEmail] = useState('');
@@ -145,4 +145,48 @@ export default function Login() {
       </form>
     </div>
   );
+}
+
+/** Local mode (edge app): the password set on the app, no IoT Open account. */
+function LocalLogin() {
+  const { signInLocal } = useApp();
+  const [secret, setSecret] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const submit = async (e) => {
+    e.preventDefault();
+    setBusy(true);
+    setError('');
+    try {
+      await signInLocal(secret);
+    } catch (err) {
+      setError(err.status === 401 ? 'Fel lösenord.' : err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="login">
+      <form className="login-form" onSubmit={submit}>
+        <picture>
+          <source srcSet="branding/iotopen-logo-white.svg" media="(prefers-color-scheme: dark)" />
+          <img className="login-logo" src="branding/iotopen-logo.svg" alt="IoT Open" />
+        </picture>
+        <h1>{config.appTitle}</h1>
+        <label className="field">
+          <span>Lösenord</span>
+          <input type="password" autoComplete="current-password" value={secret} onChange={(e) => setSecret(e.target.value)} required autoFocus />
+          <small className="muted">Lösenordet som är satt på appen Lokal dashboard i IoT Open.</small>
+        </label>
+        {error && <div className="error-box">{error}</div>}
+        <button className="btn primary block" disabled={busy}>
+          {busy ? 'Loggar in…' : 'Logga in'}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+export default function Login() {
+  return config.local ? <LocalLogin /> : <CloudLogin />;
 }

@@ -351,7 +351,15 @@ async function api(req, res, url) {
     tokens.set(token, user);
     return send(res, 200, { token });
   }
-  const me = auth(req);
+  // an edge client's own credentials (Basic <client_id>:<mqtt password>) - like real IoT Open they may read
+  // functions, devices and the latest values of their installation, not its files, metadata or log
+  if (/^Basic /.test(req.headers.authorization || '') && !req.headers['x-api-key']) {
+    const [cid] = Buffer.from(req.headers.authorization.slice(6), 'base64').toString().split(':');
+    const inst = installations.find((i) => String(i.client_id) === cid);
+    if (!inst) return send(res, 401, { message: 'Unauthorized', status: 401 });
+    if (m !== 'GET' || !['functionx', 'devicex', 'status'].includes(seg[2]) || Number(seg[3]) !== inst.id) return send(res, 403, { message: 'Forbidden', status: 403 });
+  }
+  const me = auth(req) || (/^Basic /.test(req.headers.authorization || '') ? users[0] : null);
   if (!me) return send(res, 401, { message: 'Unauthorized', status: 401 });
   if (p === '/api/v2/auth' && m === 'DELETE') { tokens.delete(req.headers['x-api-key']); return send(res, 200, { message: 'ok' }); }
 

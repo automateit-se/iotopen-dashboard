@@ -113,6 +113,18 @@ The app only uses URLs relative to the directory it is served from (API, MQTT, `
 
 The page needs the trailing slash (`/dashboard/`). With `BASE_PATH` the container redirects `/dashboard` to `/dashboard/`; behind a prefix-stripping proxy, let the proxy do that redirect (e.g. `location = /dashboard { return 301 /dashboard/; }`).
 
+### Local dashboard on the edge client
+
+The edge app [Local dashboard](https://github.com/automateit-se/edge-app-local-dashboard) serves this dashboard on the installation's local network, also without internet. It uses the same code, built as one self-contained HTML file: `npm run build:local` writes `dist-local/iotopen-dashboard-local.html` (scripts, styles and logos inlined), and every release gets that file attached by the `local` workflow. The app downloads it when it starts.
+
+In the app, `/config.json` has a `local` section, which switches the dashboard to local mode:
+
+- one installation, no sign-in to IoT Open and no list of installations; editing is hidden (the dashboard is edited in the cloud),
+- the app acts as a read-only IoT Open for the installation (REST and MQTT over WebSocket), so widgets work as in the cloud,
+- the pages, the start page and the widget types that are shown can be chosen per app instance, and a kiosk mode hides the header,
+- access as set on the app: open, a PIN for control (*Lås upp* in the header) or a password for everything,
+- the footer says whether the app can reach IoT Open.
+
 ## Configuration in IoT Open
 
 ### On the installation (metadata)
@@ -341,6 +353,8 @@ src/lib/status.js               OK / Warning / Critical and silent functions
 src/lib/history.js              log reading with server-side aggregation
 src/lib/periods.js              periods in local time and consumption per period (consumption and summary widgets)
 src/lib/background.js           background image per page: settings, scaling and compression
+src/lib/local.js                local mode (edge app): pages, start page, excluded widget types, sign-in
+scripts/build-local.mjs         the dashboard as one HTML file for the edge app
 src/context/AppContext.jsx      session and installations
 src/context/useInstallation.js  REST snapshot + MQTT live values + evt events for one installation
 src/components/widgets/         widget types, timeline, multi-series graph, range/zoom

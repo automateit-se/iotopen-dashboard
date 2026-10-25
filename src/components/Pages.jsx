@@ -10,13 +10,13 @@ const PAGE_COLORS = THEME_META.filter((t) => t.group === 'Grundfärger');
 const validColor = (v) => !v || (typeof CSS !== 'undefined' && CSS.supports('color', v));
 
 /** Tabs for the dashboard's pages; in edit mode also new page, edit and move the current one. */
-export function PageTabs({ iid, pages, current, editing, onAdd, onEdit, onMove }) {
+export function PageTabs({ iid, pages, current, editing, explicit = false, onAdd, onEdit, onMove }) {
   const i = pages.findIndex((p) => p.id === current);
   return (
     <nav className="page-tabs" aria-label="Sidor">
       <div className="page-tab-list">
         {pages.map((p, n) => (
-          <a key={p.id} href={n === 0 ? `#/i/${iid}` : `#/i/${iid}/p/${encodeURIComponent(p.id)}`} className={`page-tab ${p.id === current ? 'on' : ''}`} aria-current={p.id === current ? 'page' : undefined}>
+          <a key={p.id} href={n === 0 && !explicit ? `#/i/${iid}` : `#/i/${iid}/p/${encodeURIComponent(p.id)}`} className={`page-tab ${p.id === current ? 'on' : ''}`} aria-current={p.id === current ? 'page' : undefined}>
             {p.icon && <Icon name={p.icon} size={15} />}
             <span>{p.title}</span>
           </a>

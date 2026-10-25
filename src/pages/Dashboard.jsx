@@ -14,6 +14,8 @@ import { newMqttKey } from '../lib/mqttWidget.js';
 import { PageEditor, PageTabs } from '../components/Pages.jsx';
 import { useBackground } from '../context/useBackground.js';
 import { backgroundOf } from '../lib/background.js';
+import { config } from '../api/config.js';
+import { localPages, startPage, excludedTypes } from '../lib/local.js';
 import { worstStatus, staleOf, staleDevice } from '../lib/status.js';
 import { errText } from '../components/Modal.jsx';
 import { Icon } from '../components/icons.jsx';
@@ -50,11 +52,15 @@ export default function Dashboard({ iid, pageId = '' }) {
   const [dragKey, setDragKey] = useState(null);
   const [saveError, setSaveError] = useState('');
 
-  const admin = inst && user ? isAdmin(user, inst) : false;
-  // pages: the one in the address, else the first; each widget is on one page
-  const pages = pagesOf(layout);
-  const page = pages.find((p) => p.id === pageId) || pages[0];
-  const onPage = widgets.filter((w) => pageOfWidget(w, pages) === page.id);
+  // local mode (edge app): view only, the pages and widget types chosen on the app instance
+  const local = config.local;
+  const admin = !local && inst && user ? isAdmin(user, inst) : false;
+  // pages: the one in the address, else the first (locally the start page); each widget is on one page
+  const allPages = pagesOf(layout);
+  const pages = local ? localPages(allPages, local.pages) : allPages;
+  const page = pages.find((p) => p.id === pageId) || (local ? startPage(pages, local.start) : pages[0]);
+  const hiddenTypes = local ? excludedTypes(local.exclude) : null;
+  const onPage = widgets.filter((w) => pageOfWidget(w, allPages) === page.id && !hiddenTypes?.has(w.type));
   // visible = "false" in IoT Open hides a widget; in edit mode it stays (dimmed) so it can be managed
   const shown = editing ? onPage : onPage.filter((w) => !w.hidden);
   // a new widget lands on the page being edited (nothing stored for the first page)
@@ -356,9 +362,11 @@ export default function Dashboard({ iid, pageId = '' }) {
       )}
       <div className="page-head">
         <div>
-          <a href="#/" className="back">
-            <Icon name="back" size={16} /> Installationer
-          </a>
+          {!local && (
+            <a href="#/" className="back">
+              <Icon name="back" size={16} /> Installationer
+            </a>
+          )}
           <h1>{title}</h1>
         </div>
         <div className="row gap wrap">
@@ -390,6 +398,7 @@ export default function Dashboard({ iid, pageId = '' }) {
         <PageTabs
           iid={iid}
           pages={pages}
+          explicit={!!local}
           current={page.id}
           editing={editing}
           onAdd={() => setPageEditor({ id: null })}
