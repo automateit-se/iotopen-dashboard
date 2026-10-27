@@ -5,19 +5,28 @@ import { useApp } from '../context/AppContext.jsx';
 import { Modal, Field } from './Modal.jsx';
 import { Icon } from './icons.jsx';
 
-// /local/status of the edge app, read every 30 s while anything shows it (header, footer, live badge): one
-// request for all of them.
-const STATUS_MS = 30000;
-const statusStore = { value: null, listeners: new Set(), timer: null };
+// The edge app's status for the header, footer and live badge. Nothing is polled: /local/status is read when the
+// dashboard starts and whenever its connection to the app comes back (refreshLocalStatus), and the app passes on
+// the edge client's connection to IoT Open over MQTT (<client id>/box/event/status, see useInstallation).
+const statusStore = { value: null, listeners: new Set(), read: false };
 
-function readStatus() {
+const publishStatus = (s) => {
+  statusStore.value = s;
+  statusStore.listeners.forEach((fn) => fn(s));
+};
+
+/** Reads /local/status again; a failure means the app does not answer. */
+export function refreshLocalStatus() {
+  if (!config.local) return;
   fetch(appUrl('local/status'), { headers: getToken() ? { 'X-API-Key': getToken() } : {}, cache: 'no-store' })
     .then((r) => r.json())
     .catch(() => ({ ...(statusStore.value || {}), app: false }))
-    .then((s) => {
-      statusStore.value = s;
-      statusStore.listeners.forEach((fn) => fn(s));
-    });
+    .then(publishStatus);
+}
+
+/** The edge client's connection to IoT Open, as its MQTT bridge reports it (1 / 0). */
+export function setLocalBridge(up) {
+  publishStatus({ ...(statusStore.value || {}), app: true, bridge: up, cloud: up });
 }
 
 /** { cloud, session, app, … } of the local edge app; null until read, and outside local mode. */
@@ -26,17 +35,11 @@ export function useLocalStatus() {
   useEffect(() => {
     if (!config.local) return;
     statusStore.listeners.add(setStatus);
-    if (!statusStore.timer) {
-      readStatus();
-      statusStore.timer = setInterval(readStatus, STATUS_MS);
+    if (!statusStore.read) {
+      statusStore.read = true;
+      refreshLocalStatus();
     }
-    return () => {
-      statusStore.listeners.delete(setStatus);
-      if (!statusStore.listeners.size) {
-        clearInterval(statusStore.timer);
-        statusStore.timer = null;
-      }
-    };
+    return () => statusStore.listeners.delete(setStatus);
   }, []);
   return status;
 }
