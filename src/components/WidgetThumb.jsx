@@ -74,6 +74,17 @@ const DRAW = {
       <rect x="24" y="28.5" width="18" height="3" rx="1.5" className="th-fill" />
     </>
   ),
+  thermostat: (
+    <>
+      <circle cx="20" cy="17" r="10" className="th-track" />
+      <path d="M12.9 24.1A10 10 0 1 1 27.1 24.1" className="th-line" />
+      <rect x="36" y="9" width="20" height="5" rx="2.5" className="th-fill" />
+      <rect x="36" y="18" width="14" height="3" rx="1.5" className="th-off" />
+      <rect x="8" y="30" width="14" height="5" rx="2.5" className="th-fill" />
+      <rect x="25" y="30" width="14" height="5" rx="2.5" className="th-off" />
+      <rect x="42" y="30" width="14" height="5" rx="2.5" className="th-off" />
+    </>
+  ),
   card: (
     <>
       {[10, 20, 30].map((y) => (

@@ -5,11 +5,17 @@ import { WidgetThumb } from './WidgetThumb.jsx';
 import { candidates, isHidden, fitsType, devName as deviceName, WIDGET_LABEL } from '../lib/dashboard.js';
 import { formatValue } from '../lib/format.js';
 import { isMediaDevice } from '../lib/media.js';
+import { isThermostatDevice } from '../lib/thermostat.js';
 
 // the miniatures under the hint: what can be made from a function or device
-const THUMBS = ['value', 'chart', 'gauge', 'switch', 'status', 'number', 'button', 'consumption', 'sum', 'card', 'media'];
+const THUMBS = ['value', 'chart', 'gauge', 'switch', 'status', 'number', 'button', 'consumption', 'sum', 'card', 'media', 'thermostat'];
 
 // focus the search only with a mouse: on a touch screen it opens the keyboard over half the list
+const DEVICE_AS = {
+  media: { noun: 'mediaspelare', what: 'låt, status, spela/pausa, volym' },
+  thermostat: { noun: 'termostat', what: 'temperatur, börvärde, läge' },
+  card: { noun: 'enhetskort', what: 'alla funktioner i ett kort' },
+};
 const FINE_POINTER = typeof window !== 'undefined' && !!window.matchMedia?.('(hover: hover) and (pointer: fine)').matches;
 
 /**
@@ -24,9 +30,11 @@ export function AddWidget({ raw, valueOf, onPick, onNewGroup, onNewLink, onNewMq
   const all = useMemo(() => candidates(raw), [raw]);
   const hiddenCount = all.filter((c) => isHidden(c.obj)).length;
   // with a type chosen: what fits it and does not already have a widget of that type
-  // what a device can still become: a card, and a media player when it has media functions
+  // what a device can still become: a card, a media player when it has media functions, a thermostat when it
+  // has a setpoint (Börvärde)
   // (one more of a type the object already has becomes an extra widget, e.g. a second push button)
-  const deviceTypes = (c) => ['card', ...(isMediaDevice(raw, c.obj.id) ? ['media'] : [])].filter((t) => !type || t === type);
+  const deviceTypes = (c) =>
+    ['card', ...(isMediaDevice(raw, c.obj.id) ? ['media'] : []), ...(isThermostatDevice(raw, c.obj.id) ? ['thermostat'] : [])].filter((t) => !type || t === type);
   const list = (showHidden ? all : all.filter((c) => !isHidden(c.obj)))
     .filter((c) => !type || fitsType(type, c.kind, c.obj))
     .filter((c) => c.kind !== 'device' || deviceTypes(c).length);
@@ -105,7 +113,7 @@ export function AddWidget({ raw, valueOf, onPick, onNewGroup, onNewLink, onNewMq
         </button>
       </div>
       <p className="muted small add-hint">
-        Övriga widgets (värde, graf, mätare, brytare, status, börvärde, tryckknapp, förbrukning, summa per period, enhetskort, media): välj först en funktion eller enhet nedan, sedan typ i nästa steg.
+        Övriga widgets (värde, graf, mätare, brytare, status, börvärde, tryckknapp, förbrukning, summa per period, enhetskort, media, termostat): välj först en funktion eller enhet nedan, sedan typ i nästa steg.
         Klicka på en miniatyr för att bara se det som passar. En funktion kan ha flera widgets, även av samma typ, t.ex. fyra tryckknappar som skickar olika värden.
       </p>
       <div className="thumbs" role="group" aria-label="Widgettyper">
@@ -144,31 +152,24 @@ export function AddWidget({ raw, valueOf, onPick, onNewGroup, onNewLink, onNewMq
                   <strong>{g.name}</strong>
                   <span className="muted small grow">
                     {g.dev?.type ? ` · ${g.dev.type}` : ''}
-                    {g.fns.length ? ` · ${g.fns.length} ${g.fns.length === 1 ? 'funktion' : 'funktioner'}` : ` · som ${deviceTypes(g.card).map((t) => (t === 'media' ? 'mediaspelare' : 'enhetskort')).join(' eller ')}`}
+                    {g.fns.length ? ` · ${g.fns.length} ${g.fns.length === 1 ? 'funktion' : 'funktioner'}` : ` · som ${deviceTypes(g.card).map((t) => DEVICE_AS[t].noun).join(' eller ')}`}
                   </span>
                 </button>
                 {isOpen(g) && (
                   <ul className="pick-list">
-                    {g.card && deviceTypes(g.card).includes('media') && (
-                      <li>
-                        <button type="button" onClick={() => onPick(g.card, 'media')}>
-                          <span>
-                            <strong>Hela enheten som mediaspelare</strong>
-                            <span className="muted small"> · låt, status, spela/pausa, volym</span>
-                          </span>
-                        </button>
-                      </li>
-                    )}
-                    {g.card && deviceTypes(g.card).includes('card') && (
-                      <li>
-                        <button type="button" onClick={() => onPick(g.card, 'card')}>
-                          <span>
-                            <strong>Hela enheten som enhetskort</strong>
-                            <span className="muted small"> · alla funktioner i ett kort</span>
-                          </span>
-                        </button>
-                      </li>
-                    )}
+                    {g.card &&
+                      ['media', 'thermostat', 'card']
+                        .filter((t) => deviceTypes(g.card).includes(t))
+                        .map((t) => (
+                          <li key={t}>
+                            <button type="button" onClick={() => onPick(g.card, t)}>
+                              <span>
+                                <strong>Hela enheten som {DEVICE_AS[t].noun}</strong>
+                                <span className="muted small"> · {DEVICE_AS[t].what}</span>
+                              </span>
+                            </button>
+                          </li>
+                        ))}
                     {g.fns.map((c) => (
                       <FnRow key={c.obj.id} c={c} />
                     ))}

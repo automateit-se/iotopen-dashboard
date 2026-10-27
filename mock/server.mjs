@@ -30,6 +30,8 @@ const logs = [];
 // Some devices publish a bare value ("1") instead of JSON; IoT Open treats it as { value: 1 }.
 const retained = new Map(); // full topic -> raw payload text
 const setStatus = (e) => statuses.set(`${e.installation_id}|${e.topic}`, e);
+// simulated thermostats: base topic -> { iid, client }
+const thermostats = new Map();
 // simulated media players: base topic -> { iid, client, track }; invented track names
 const media = new Map();
 const TRACKS = ['Exempelbandet – Första låten', 'Testkören – Sång om ingenting', 'Demoduon – Långsam vals', 'Påhittad artist – Ett längre låtnamn som inte får plats på en rad i widgeten'];
@@ -157,6 +159,15 @@ function signal(iid, topic, gen) {
     [`${mp}/playing`, 1, TRACKS[0]], [`${mp}/volume`, 35, ''], [`${mp}/mute`, 0, ''], [`${mp}/state`, 'playing', ''], [`${mp}/power`, 1, ''],
     [`${rp}/playing`, 0, 'P1 – Morgonpasset'], [`${rp}/volume`, 20, ''], [`${rp}/state`, 0, ''],
   ]) setStatus({ client_id: 5001, installation_id: iid, topic, value, msg, timestamp: now() - 120 });
+  // a thermostat mirrored from Home Assistant: current, target (setpoint), mode and action on one device
+  const hall = dev(iid, 'climate', 'Termostat hall', { 'dashboard.widget': 'thermostat' });
+  const tp = 'obj/ha/climate/hall';
+  fn(iid, hall, 'temperature', 'Termostat hall Temperatur', `${tp}/current`, { format: '%.1f °C', unit: '°C', 'ha.part': 'current' });
+  fn(iid, hall, 'setpoint', 'Termostat hall Börvärde', `${tp}/target`, { topic_write: `set/${tp}/target`, format: '%.1f °C', unit: '°C', min: '5', max: '30', step: '0.5', 'ha.part': 'target' });
+  fn(iid, hall, 'text', 'Termostat hall Läge', `${tp}/mode`, { topic_write: `set/${tp}/mode`, 'ha.hvac_modes': 'off,heat,auto', 'ha.part': 'mode' });
+  fn(iid, hall, 'text', 'Termostat hall Drift', `${tp}/action`, { 'ha.part': 'action' });
+  thermostats.set(tp, { iid, client: 5001 });
+  for (const [topic, value, msg] of [[`${tp}/current`, 20.6, ''], [`${tp}/target`, 21, ''], [`${tp}/mode`, 'heat', 'heat'], [`${tp}/action`, 'heating', 'heating']]) setStatus({ client_id: 5001, installation_id: iid, topic, value, msg, timestamp: now() - 300 });
   for (const [topic, v] of [['obj/zwave/12/setpoint', 21.5], ['obj/zwave/20/state', 0], ['obj/vent/1/state', 1]]) setStatus({ client_id: 5001, installation_id: iid, topic, value: v, msg: '', timestamp: now() - 600 });
 }
 // Lagret – nothing configured: shows the empty state and the "add widget" flow
@@ -490,6 +501,25 @@ function wsSend(socket, bytes) {
 }
 const mstr = (s) => { const b = Buffer.from(s); return [b.length >> 8, b.length & 255, ...b]; };
 const mlen = (n) => { const o = []; do { let d = n % 128; n = Math.floor(n / 128); if (n > 0) d |= 128; o.push(d); } while (n > 0); return o; };
+/** A thermostat answers like the Home Assistant bridge: the new target or mode, and what it is doing now. */
+function thermostatWrite(inst, f, pl) {
+  const m = /^(.*)\/(target|mode)$/.exec(f.meta.topic_read);
+  if (!m || !thermostats.has(m[1])) return false;
+  const send = (part, value, msg = '') => {
+    const e = { client_id: inst.client_id, installation_id: inst.id, topic: `${m[1]}/${part}`, value, msg, timestamp: now() };
+    logs.push(e); setStatus(e); mqttBroadcast(e);
+  };
+  setTimeout(() => {
+    if (m[2] === 'target') send('target', Number(pl.value));
+    else send('mode', String(pl.value), String(pl.value));
+    const mode = statuses.get(`${inst.id}|${m[1]}/mode`)?.value;
+    const cur = Number(statuses.get(`${inst.id}|${m[1]}/current`)?.value);
+    const tgt = Number(statuses.get(`${inst.id}|${m[1]}/target`)?.value);
+    const action = mode === 'off' ? 'off' : cur < tgt ? 'heating' : 'idle';
+    send('action', action, action);
+  }, 400);
+  return true;
+}
 /** A media player answers like the Home Assistant bridge: playing keeps the track in msg, state follows. */
 function mediaWrite(inst, f, pl) {
   const m = /^(.*)\/(playing|volume|mute|power)$/.exec(f.meta.topic_read);
@@ -581,6 +611,7 @@ function handleMqtt(c, type, body) {
     const f = functions.find((x) => x.installation_id === inst.id && (x.meta.topic_write === mm[2] || x.meta.topic_write_onoff === mm[2]));
     if (!f) return;
     if (mediaWrite(inst, f, pl)) return;
+    if (thermostatWrite(inst, f, pl)) return;
     setTimeout(() => {
       const topic = f.meta.topic_write_onoff === mm[2] ? f.meta.topic_read_onoff : f.meta.topic_read;
       const e = { client_id: inst.client_id, installation_id: inst.id, topic, value: pl.value, msg: '', timestamp: now() };
