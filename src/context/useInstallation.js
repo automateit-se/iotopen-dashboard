@@ -4,6 +4,7 @@ import { createMqtt, defaultMqttUrl } from '../api/mqtt.js';
 import { config } from '../api/config.js';
 import { buildWidgets, readLayout, readLogo } from '../lib/dashboard.js';
 import { createMqttStore, mqttFilters } from '../lib/mqttWidget.js';
+import { refreshLocalStatus, setLocalBridge } from '../components/LocalBar.jsx';
 
 const POLL_MS = 30000; // REST polling only while MQTT is not live
 const STRUCTURE_DEBOUNCE_MS = 1000; // bulk edits emit many evt/*/updated – reload once
@@ -13,6 +14,8 @@ const STRUCTURE_EVENTS = ['evt/functionx/updated', 'evt/devicex/updated'];
 const INSTALLATION_EVENT = 'evt/installation/updated';
 const FILE_EVENT = 'evt/file/updated';
 const EVENTS = [...STRUCTURE_EVENTS, INSTALLATION_EVENT, FILE_EVENT];
+// local mode: the edge app passes on its edge client's connection to IoT Open (the MQTT bridge's status)
+const BRIDGE_STATUS = 'box/event/status';
 
 /**
  * Everything for one installation:
@@ -59,7 +62,8 @@ export function useInstallation(iid) {
       .filter(Boolean)
       .map((t) => `${i.client_id}/${normTopic(t)}`);
     const widgetTopics = filtersRef.current.map((t) => `${i.client_id}/${t}`);
-    mqttRef.current.setSubscriptions([...topics, ...widgetTopics, ...EVENTS.map((e) => `${i.client_id}/${e}`)]);
+    const local = config.local ? [`${i.client_id}/${BRIDGE_STATUS}`] : [];
+    mqttRef.current.setSubscriptions([...topics, ...widgetTopics, ...EVENTS.map((e) => `${i.client_id}/${e}`), ...local]);
   }, []);
 
   /** Reads structure + values (+ layout unless skipped). Newer live values are kept. */
@@ -155,6 +159,7 @@ export function useInstallation(iid) {
     (fullTopic, payload, { retained = false, text = '' } = {}) => {
       const m = /^(\d+)\/(.*)$/.exec(fullTopic);
       if (!m || String(instRef.current?.client_id) !== m[1]) return;
+      if (m[2] === BRIDGE_STATUS) return config.local && setLocalBridge(String(payload?.value).trim() === '1');
       // MQTT widgets: the raw message, for every topic (a widget may show a function's topic too)
       if (!m[2].startsWith('evt/')) mqttStore.current.add(m[2], text, { retained, filters: filtersRef.current });
       if (STRUCTURE_EVENTS.includes(m[2])) return debounce('structure', () => load({ withLayout: false, quiet: true }));
@@ -212,6 +217,8 @@ export function useInstallation(iid) {
   useEffect(() => {
     // (re)connected: anything that changed while offline – values, structure, meta, layout – is read once
     if (liveState === 'live' && liveRef.current !== 'live' && rawRef.current) load({ quiet: true });
+    // local mode: the app's own status (session, IoT Open) when the connection to it changes
+    if (config.local && liveState !== liveRef.current) refreshLocalStatus();
     liveRef.current = liveState;
   }, [liveState, load]);
   useEffect(() => {
