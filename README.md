@@ -123,7 +123,7 @@ In the app, `/config.json` has a `local` section, which switches the dashboard t
 - the app acts as a read-only IoT Open for the installation (REST and MQTT over WebSocket), so widgets work as in the cloud,
 - the pages, the start page and the widget types that are shown can be chosen per app instance, and a kiosk mode hides the header,
 - access as set on the app: open, a PIN for control (*Lås upp* in the header) or a password for everything,
-- the footer says whether the app can reach IoT Open.
+- the footer says whether the app can reach IoT Open, and the *Live* badge turns into a yellow *Lokalt* when it cannot: the screen is connected, but only to what is on the installation (values and control), with the history the app has kept.
 
 ## Configuration in IoT Open
 

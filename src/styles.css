@@ -172,6 +172,9 @@ input:focus, select:focus, textarea:focus, button:focus-visible { outline: 2px s
 /* Live (MQTT connected) uses the same green as status OK */
 .live.on { color: var(--status-ok); background: color-mix(in srgb, var(--status-ok) 12%, var(--surface)); font-weight: 600; }
 .live.on .dot { background: var(--status-ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-ok) 25%, transparent); }
+/* local mode, the edge app does not reach IoT Open: connected, but only to what is on the installation */
+.live.local-only { color: var(--status-warn-text); background: color-mix(in srgb, var(--status-warn) 16%, var(--surface)); font-weight: 600; cursor: help; }
+.live.local-only .dot { background: var(--status-warn); box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-warn) 30%, transparent); }
 
 /* ---- login ---- */
 .login { min-height: 100vh; display: grid; place-items: center; padding: 16px; }
