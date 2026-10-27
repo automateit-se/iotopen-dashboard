@@ -5,22 +5,37 @@ import { useApp } from '../context/AppContext.jsx';
 import { Modal, Field } from './Modal.jsx';
 import { Icon } from './icons.jsx';
 
-/** /local/status of the edge app, read once a minute: { cloud, session, … }. */
+// /local/status of the edge app, read every 30 s while anything shows it (header, footer, live badge): one
+// request for all of them.
+const STATUS_MS = 30000;
+const statusStore = { value: null, listeners: new Set(), timer: null };
+
+function readStatus() {
+  fetch(appUrl('local/status'), { headers: getToken() ? { 'X-API-Key': getToken() } : {}, cache: 'no-store' })
+    .then((r) => r.json())
+    .catch(() => ({ ...(statusStore.value || {}), app: false }))
+    .then((s) => {
+      statusStore.value = s;
+      statusStore.listeners.forEach((fn) => fn(s));
+    });
+}
+
+/** { cloud, session, app, … } of the local edge app; null until read, and outside local mode. */
 export function useLocalStatus() {
-  const [status, setStatus] = useState(null);
+  const [status, setStatus] = useState(statusStore.value);
   useEffect(() => {
     if (!config.local) return;
-    let alive = true;
-    const read = () =>
-      fetch(appUrl('local/status'), { headers: getToken() ? { 'X-API-Key': getToken() } : {}, cache: 'no-store' })
-        .then((r) => r.json())
-        .then((s) => alive && setStatus(s))
-        .catch(() => alive && setStatus((s) => (s ? { ...s, app: false } : { app: false })));
-    read();
-    const t = setInterval(read, 60000);
+    statusStore.listeners.add(setStatus);
+    if (!statusStore.timer) {
+      readStatus();
+      statusStore.timer = setInterval(readStatus, STATUS_MS);
+    }
     return () => {
-      alive = false;
-      clearInterval(t);
+      statusStore.listeners.delete(setStatus);
+      if (!statusStore.listeners.size) {
+        clearInterval(statusStore.timer);
+        statusStore.timer = null;
+      }
     };
   }, []);
   return status;

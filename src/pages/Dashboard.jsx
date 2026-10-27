@@ -16,6 +16,7 @@ import { useBackground } from '../context/useBackground.js';
 import { backgroundOf } from '../lib/background.js';
 import { config } from '../api/config.js';
 import { localPages, startPage, excludedTypes } from '../lib/local.js';
+import { useLocalStatus } from '../components/LocalBar.jsx';
 import { worstStatus, staleOf, staleDevice } from '../lib/status.js';
 import { errText } from '../components/Modal.jsx';
 import { Icon } from '../components/icons.jsx';
@@ -54,6 +55,9 @@ export default function Dashboard({ iid, pageId = '' }) {
 
   // local mode (edge app): view only, the pages and widget types chosen on the app instance
   const local = config.local;
+  // locally, "Live" only says the browser reaches the edge app; without IoT Open it is "Lokalt" in yellow
+  const localStatus = useLocalStatus();
+  const cutOff = !!local && liveState === 'live' && localStatus?.cloud === false;
   const admin = !local && inst && user ? isAdmin(user, inst) : false;
   // pages: the one in the address, else the first (locally the start page); each widget is on one page
   const allPages = pagesOf(layout);
@@ -370,8 +374,15 @@ export default function Dashboard({ iid, pageId = '' }) {
           <h1>{title}</h1>
         </div>
         <div className="row gap wrap">
-          <span className={`live ${liveState === 'live' ? 'on' : ''}`} title="Live = värden kommer via MQTT. Polling = REST var 30:e sekund.">
-            <span className="dot" /> {LIVE_LABEL[liveState] || liveState}
+          <span
+            className={`live ${cutOff ? 'local-only' : liveState === 'live' ? 'on' : ''}`}
+            title={
+              cutOff
+                ? 'Lokalt: edge clienten når inte IoT Open. Värden och styrning från enheterna på installationen fungerar, historiken är den som appen har sparat.'
+                : 'Live = värden kommer via MQTT. Polling = REST var 30:e sekund.'
+            }
+          >
+            <span className="dot" /> {cutOff ? 'Lokalt' : LIVE_LABEL[liveState] || liveState}
           </span>
           {admin && !editing && (
             <button type="button" className="btn" onClick={() => setEditing(true)}>
