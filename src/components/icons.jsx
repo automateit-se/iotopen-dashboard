@@ -27,6 +27,7 @@ const P = {
   volume: 'M11 5 6 9H2v6h4l5 4zM15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14',
   mute: 'M11 5 6 9H2v6h4l5 4zM16 9l6 6M22 9l-6 6',
   plus: 'M12 5v14M5 12h14',
+  minus: 'M5 12h14',
   edit: 'M4 20h4L19 9l-4-4L4 16zM14 6l4 4',
   close: 'M6 6l12 12M18 6 6 18',
   grip: 'M9 5h.01M15 5h.01M9 12h.01M15 12h.01M9 19h.01M15 19h.01',

@@ -8,6 +8,7 @@ import { TrackerWidget } from './Tracker.jsx';
 import { ConsumptionWidget } from './Consumption.jsx';
 import { SummaryWidget } from './Summary.jsx';
 import { MediaWidget } from './Media.jsx';
+import { ThermostatWidget } from './Thermostat.jsx';
 import { MqttWidget } from './Mqtt.jsx';
 import { TextWidget } from './Text.jsx';
 import { statusOf, staleProps } from '../../lib/status.js';
@@ -329,5 +330,6 @@ export const WIDGET_COMPONENTS = {
   chart: ChartWidget,
   card: CardWidget,
   media: MediaWidget,
+  thermostat: ThermostatWidget,
   missing: MissingWidget,
 };

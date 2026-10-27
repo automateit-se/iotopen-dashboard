@@ -634,3 +634,16 @@ textarea { resize: vertical; min-height: 80px; }
 .local-state.warn { color: var(--status-warn-text); font-weight: 600; }
 .topbar-btn { background: transparent; color: var(--topbar-text); border-color: var(--topbar-line, rgba(255, 255, 255, 0.35)); }
 .topbar-btn:hover:not(:disabled) { background: var(--topbar-hover, rgba(255, 255, 255, 0.1)); }
+.thermo { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.thermo-main { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.thermo-cur, .thermo-set-val { display: flex; flex-direction: column; align-items: center; line-height: 1.15; }
+.thermo-cur-val { font-size: 28px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.thermo-set { display: flex; align-items: center; gap: 10px; }
+.thermo-set-val span:first-child { font-size: 22px; font-weight: 600; color: var(--tile-color, var(--data)); font-variant-numeric: tabular-nums; min-width: 4.2em; text-align: center; }
+.thermo-set-val.pending span:first-child { opacity: 0.6; }
+.thermo-modes { flex-wrap: wrap; }
+.thermo-modes button { flex: 1 1 auto; }
+.thermo.act-heating .thermo-set-val span:first-child { color: #ea580c; }
+.thermo.act-cooling .thermo-set-val span:first-child { color: #2563eb; }
+.thermo.is-off .thermo-set-val span:first-child { color: var(--muted); }
+.thermo-modes button:disabled { text-decoration: none; cursor: default; }

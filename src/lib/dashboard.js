@@ -161,6 +161,7 @@ export const FUNCTION_WIDGETS = [
 export const DEVICE_WIDGETS = [
   { id: 'card', label: 'Enhetskort', help: 'Alla funktioner som hör till enheten i ett kort.' },
   { id: 'media', label: 'Media', help: 'Mediaspelare: aktuell låt, status, spela/pausa, volym, mute och på/av från enhetens funktioner (…/playing, …/volume, …/mute, …/state, …/power).' },
+  { id: 'thermostat', label: 'Termostat', help: 'Termostat: aktuell temperatur, börvärde med − / +, läge och drift från enhetens funktioner (…/current, …/target, …/mode, …/action).' },
 ];
 export const WIDGET_LABEL = { ...Object.fromEntries([...FUNCTION_WIDGETS, ...DEVICE_WIDGETS].map((w) => [w.id, w.label])), timeline: 'Tidslinje', multichart: 'Graf (flera)', tracker: 'Karta (Tracker)', www: 'Länkknapp (www)', mqtt: 'MQTT', text: 'Text', missing: 'Saknas' };
 
@@ -173,7 +174,7 @@ export const heightOptions = (type) => [...(HALF_HEIGHT_TYPES.includes(type) ? [
  * Value, graph, gauge and status take any function.
  */
 export function fitsType(type, kind, obj) {
-  if (type === 'card' || type === 'media') return kind === 'device';
+  if (type === 'card' || type === 'media' || type === 'thermostat') return kind === 'device';
   if (kind !== 'function') return false;
   if (type === 'switch') return !!controlTopic(obj, writeTopic(obj)) && isBinary(obj);
   if (type === 'button') return !!controlTopic(obj, writeTopic(obj));
@@ -201,6 +202,7 @@ export const DEFAULT_LAYOUT = {
   chart: { w: 4, h: 2, hours: 24 },
   card: { w: 4, h: 2 },
   media: { w: 4, h: 2 },
+  thermostat: { w: 4, h: 2 },
   timeline: { w: 8, h: 2, hours: 24 },
   multichart: { w: 4, h: 2, hours: 24 },
   tracker: { w: 4, h: 3, hours: 24, points: 200, pair: 5, fade: true },
@@ -546,7 +548,7 @@ export const isHidden = (o) => ['0', 'false', 'no'].includes(String(o?.meta?.vis
 
 /**
  * Objects that can get a (another) widget, with the types they already have: every function (one function
- * can have several widgets), and every device (as a card and/or a media player).
+ * can have several widgets), and every device (as a card, a media player and/or a thermostat).
  */
 export function candidates(raw) {
   return [
