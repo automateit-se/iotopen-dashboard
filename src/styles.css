@@ -216,7 +216,7 @@ input:focus, select:focus, textarea:focus, button:focus-visible { outline: 2px s
 .tile header { display: flex; align-items: center; gap: 8px; min-height: 24px; }
 .tile header h3 { margin: 0; font-size: 13.5px; font-weight: 600; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tile-icon { color: var(--tile-color); flex: none; }
-.tile-body { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: center; }
+.tile-body { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: center; justify-content: safe center; }
 .tile.editing { cursor: grab; outline: 1px dashed var(--border); outline-offset: 3px; }
 .tile.dragging { opacity: 0.4; }
 .tile.is-hidden { opacity: 0.5; }
@@ -663,8 +663,10 @@ textarea { resize: vertical; min-height: 80px; }
 .thermo-graph-legend > span { display: inline-flex; align-items: center; gap: 6px; }
 .thermo-graph-legend svg { width: 20px; height: 6px; overflow: visible; }
 .thermo-graph-range { font-variant-numeric: tabular-nums; }
-.thermo-dial { position: relative; width: 100%; max-width: 240px; margin: 0 auto; touch-action: none; user-select: none; -webkit-user-select: none; }
-.thermo-dial svg { display: block; width: 100%; height: auto; overflow: visible; cursor: pointer; }
+/* the dial takes the height left in the widget and shrinks to fit it, never over the header */
+.thermo.has-dial { height: 100%; min-height: 0; }
+.thermo-dial { container-type: size; position: relative; flex: 1 1 0; min-height: 96px; max-height: 260px; width: 100%; touch-action: none; user-select: none; -webkit-user-select: none; }
+.thermo-dial svg { position: absolute; inset: 0; display: block; width: 100%; height: 100%; overflow: visible; cursor: pointer; }
 .thermo-dial svg:focus { outline: none; }
 .thermo-dial svg:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 50%; }
 .thermo-dial svg[aria-disabled='true'] { cursor: default; opacity: 0.6; }
@@ -674,5 +676,5 @@ textarea { resize: vertical; min-height: 80px; }
 .thermo-dial-knob { stroke: var(--surface); stroke-width: 4; cursor: grab; }
 .thermo-dial.dragging .thermo-dial-knob { cursor: grabbing; }
 .thermo-dial-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; text-align: center; line-height: 1.15; }
-.thermo-dial-set { font-size: 32px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--tile-color, var(--data)); }
+.thermo-dial-set { font-size: clamp(16px, 13cqmin, 32px); font-weight: 700; font-variant-numeric: tabular-nums; color: var(--tile-color, var(--data)); }
 .thermo-dial-zone { font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }

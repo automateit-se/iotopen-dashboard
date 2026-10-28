@@ -34,10 +34,11 @@ function Dial({ value, current, range, color, zone, off, disabled, label, curren
   const ref = useRef(null);
   const [dragging, setDragging] = useState(false);
   const angle = (v) => DIAL.start + ((Math.min(range.max, Math.max(range.min, v)) - range.min) / (range.max - range.min)) * DIAL.sweep;
+  // the ring is drawn centred in the svg box and scaled to its smaller side (it shrinks to fit the widget)
   const at = (e) => {
     const b = ref.current.getBoundingClientRect();
-    const k = DIAL.size / b.width;
-    return dialValueAt((e.clientX - b.left) * k - DIAL.size / 2, (e.clientY - b.top) * k - DIAL.size / 2, range, DIAL.start, DIAL.sweep);
+    const k = DIAL.size / Math.min(b.width, b.height);
+    return dialValueAt((e.clientX - b.left - b.width / 2) * k, (e.clientY - b.top - b.height / 2) * k, range, DIAL.start, DIAL.sweep);
   };
   const has = Number.isFinite(value);
   const [kx, ky] = polar(angle(has ? value : range.min), DIAL.r);
@@ -291,7 +292,7 @@ export function ThermostatWidget({ w, ctx, iid }) {
   const fmt = (fn, v) => (Number.isFinite(v) ? formatValue(fn, v) : '–');
 
   return (
-    <div className={`thermo ${off ? 'is-off' : ''} ${graph ? 'has-graph' : ''}`}>
+    <div className={`thermo ${off ? 'is-off' : ''} ${graph ? 'has-graph' : ''} ${dial ? 'has-dial' : ''}`}>
       {dial && (
         <Dial
           value={shown}
