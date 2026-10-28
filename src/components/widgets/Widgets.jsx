@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { formatValue, formatAge, isOn, onOffValues } from '../../lib/format.js';
-import { fnName, writeTopic, onOffTopics, rangeOf, isBinary, isHidden, stateColor, safeUrl, controlTopic, OBJ_META } from '../../lib/dashboard.js';
+import { fnName, writeTopic, onOffTopics, rangeOf, isBinary, isHidden, stateColor, safeUrl, controlTopic, isDiscrete, OBJ_META } from '../../lib/dashboard.js';
 import { Icon } from '../icons.jsx';
 import { TimelineWidget } from './Timeline.jsx';
 import { MultiChartWidget } from './MultiChart.jsx';
@@ -8,6 +8,7 @@ import { TrackerWidget } from './Tracker.jsx';
 import { ConsumptionWidget } from './Consumption.jsx';
 import { SummaryWidget } from './Summary.jsx';
 import { MediaWidget } from './Media.jsx';
+import { Sparkline } from './Sparkline.jsx';
 import { ThermostatWidget } from './Thermostat.jsx';
 import { MqttWidget } from './Mqtt.jsx';
 import { TextWidget } from './Text.jsx';
@@ -21,11 +22,15 @@ export const stClass = (fn, value) => {
 };
 
 // ---- value -------------------------------------------------------------------------------
-export function ValueWidget({ w, ctx }) {
+export function ValueWidget({ w, ctx, iid }) {
   const v = ctx.valueOf(w.obj);
+  const h = Number(w.layout.h) || 1;
+  // Minigraf (layout "spark"): a small curve under the value, with MIN / MEDEL / MAX from height 2
+  const spark = !!w.layout.spark && h >= 1 && !isDiscrete(w.obj);
   return (
-    <div className="w-value">
+    <div className={`w-value ${spark ? 'has-spark' : ''}`}>
       <div className={`big ${stClass(w.obj, v?.value)}`}>{formatValue(w.obj, v?.value)}</div>
+      {spark && <Sparkline fn={w.obj} ctx={ctx} iid={iid} hours={Number(w.layout.hours) || 24} stats={w.layout.stats !== false && h >= 2} />}
       <div className="muted small">{formatAge(v?.timestamp)}</div>
     </div>
   );

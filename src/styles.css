@@ -647,3 +647,12 @@ textarea { resize: vertical; min-height: 80px; }
 .thermo.act-cooling .thermo-set-val span:first-child { color: #2563eb; }
 .thermo.is-off .thermo-set-val span:first-child { color: var(--muted); }
 .thermo-modes button:disabled { text-decoration: none; cursor: default; }
+.w-value.has-spark { display: flex; flex-direction: column; gap: 4px; height: 100%; min-height: 0; }
+.spark { display: flex; flex-direction: column; gap: 6px; flex: 1; min-height: 0; }
+.spark-svg { display: block; width: 100%; flex: 1; min-height: 24px; }
+.spark-line { fill: none; stroke: var(--tile-color, var(--data)); stroke-width: 1.8; stroke-linejoin: round; stroke-linecap: round; }
+.spark-area { fill: var(--tile-color, var(--data)); opacity: 0.12; }
+.spark-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.spark-stats > div { display: flex; flex-direction: column; min-width: 0; }
+.spark-label { font-size: 11px; letter-spacing: 0.04em; color: var(--muted); }
+.spark-val { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

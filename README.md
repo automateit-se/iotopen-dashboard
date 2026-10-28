@@ -188,6 +188,7 @@ The dashboard also reads IoT Open's standard function metadata ([meta keys](http
 ### Widget types
 
 - **value**: the latest value, formatted with the function's `format` and `unit`. Discrete values use the `state_<x>`/`text_<x>` pairs, e.g. `state_closed = 0`, `text_closed = Closed`. With `dashboard.color_<x>` the whole tile is filled with the colour of the current state, and with height 0.5 it becomes a **banner**, e.g. across the top of the dashboard: `state_armed = 2`, `text_armed = Larmat`, `dashboard.color_armed = #dc2626`. The widget editor has a table for these states (value, text, colour).
+  - **Minigraf** (*Minigraf* in the editor, analog values only): a small curve under the value for the last 1 h, 6 h, 24 h, 7 days or 30 days, with **MIN / MEDEL / MAX** for the period under it (from height 2; at height 1 only the curve). The mean is time weighted, so frequent readings do not weigh more. For periods longer than 6 h the curve uses IoT Open's averages, and MIN / MAX come from IoT Open's own minimum and maximum per interval, so a short peak is not averaged away. Live values are added as they come. Stored in the layout file (`spark`, `hours`, `stats`); turning it on sets the height to 2.
 - **status**: like *value*, plus a dot showing the state (coloured when active – on, open, movement – grey otherwise, or the state's `dashboard.color_<x>`). Best for doors, alarms and motion.
 - **button** (*Tryckknapp*): a momentary push button, e.g. a door bell. Sends `dashboard.press` (default 1) to `topic_write` when pressed and, if set, `dashboard.release` when released. Works with mouse, touch and keyboard. Under *Avancerat* in the editor a switch or button can also send a message (`msg`) with the value and publish to another of the function's topics, or a topic of your own.
 - **Link button**: a button that opens another web page (http/https only) or another page of the dashboard. Created with *Add widget → New link button* (*Ny länkknapp*). It has no device or function behind it, so it is stored only in the layout file under `u:<n>` (`url` or `target_page`, `label`, `newTab`, `icon`, `color`).
@@ -283,7 +284,9 @@ Keys are `f:<function id>`, `d:<device id>`, `t:<timeline name>`, `c:<graph name
 
 | Parameter    | Applies to                   | Meaning                                                                   |
 |--------------|------------------------------|---------------------------------------------------------------------------|
-| `hours`      | graph, timeline              | Default range in hours (1, 24, 168, 720, 8760)                            |
+| `hours`      | graph, timeline, value       | Default range in hours (1, 24, 168, 720, 8760); the value's Minigraf: 1, 6, 24, 168, 720 |
+| `spark`      | value                        | `true` = Minigraf under the value                                         |
+| `stats`      | value                        | `false` = Minigraf without MIN / MEDEL / MAX                              |
 | `aggr`       | graph                        | Aggregation for long ranges: `avg`, `median`, `min`, `max`, `last`, `sum` |
 | `min_width`  | timeline                     | Minimum event width in percent                                            |
 | `min`, `max` | gauge                        | Scale limits; empty `max` = automatic                                    |
