@@ -141,9 +141,8 @@ function ThermoGraph({ t, ctx, iid, hours, tempColor, zones, current, target }) 
     // both lines run to now: the latest values hold until the next ones
     const temp = data.temp.filter((x) => x.ts >= from - 1);
     if (Number.isFinite(current) && (!temp.length || temp[temp.length - 1].ts < now)) temp.push({ ts: now, value: current });
-    let sp = data.sp;
-    if (!sp.length && Number.isFinite(target)) sp = [{ ts: from, value: target }];
-    else if (sp.length && sp[0].ts > from) sp = [{ ts: from, value: sp[0].value }, ...sp];
+    // the set point line starts where its history starts: nothing is drawn for time without values
+    const sp = data.sp;
     const vals = [...temp.map((x) => x.value), ...sp.filter((x) => x.ts >= from).map((x) => x.value)].filter(Number.isFinite);
     if (!vals.length) return null;
     let lo = Math.min(...vals);
@@ -334,7 +333,8 @@ export function ThermostatWidget({ w, ctx, iid }) {
           </div>
         )}
       </div>}
-      {t.mode && modes.length > 0 && (
+      {/* one mode is nothing to choose between: it is shown as text in the status line instead */}
+      {t.mode && modes.length > 1 && (
         <div className="thermo-modes seg" role="group" aria-label="Läge">
           {modes.map((m) => (
             <button key={m} type="button" className={m.toLowerCase() === mode.toLowerCase() ? 'on' : ''} aria-pressed={m.toLowerCase() === mode.toLowerCase()} disabled={!modeWrite} onClick={() => setMode(m)}>
@@ -345,7 +345,7 @@ export function ThermostatWidget({ w, ctx, iid }) {
       )}
       {graph && <ThermoGraph t={t} ctx={ctx} iid={iid} hours={Number(w.layout.hours) || 24} tempColor={tempColor} zones={zones} current={num(curV)} target={shown} />}
       <div className="muted small thermo-status">
-        {[t.mode && !modes.length && mode ? modeText(mode) : '', action ? actionText(action) : '', lastTs ? formatAge(lastTs) : ''].filter(Boolean).join(' · ')}
+        {[t.mode && modes.length <= 1 && mode ? modeText(mode) : '', action ? actionText(action) : '', lastTs ? formatAge(lastTs) : ''].filter(Boolean).join(' · ')}
       </div>
       {err && <div className="err small">{err}</div>}
     </div>
