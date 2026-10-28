@@ -4,7 +4,8 @@ import { Icon, ICON_NAMES } from './icons.jsx';
 import { RANGE_OPTIONS } from './widgets/RangePicker.jsx';
 import { AGGR_METHODS } from '../lib/history.js';
 import { STATUS_META, STATUS_TEXT, parseLimits } from '../lib/status.js';
-import { FUNCTION_WIDGETS, DEVICE_WIDGETS, DEFAULT_LAYOUT, OBJ_META, WIDTH_OPTIONS, HALF_HEIGHT_TYPES, heightOptions, writeTopic, onOffTopics, controlTopic, topicKeys, isHidden, stateColorKey, widgetTypes, WIDGET_LABEL, SERIES_COLORS, fnName, safeColor, unitOf } from '../lib/dashboard.js';
+import { FUNCTION_WIDGETS, DEVICE_WIDGETS, DEFAULT_LAYOUT, OBJ_META, WIDTH_OPTIONS, HALF_HEIGHT_TYPES, heightOptions, writeTopic, onOffTopics, controlTopic, topicKeys, isHidden, stateColorKey, widgetTypes, WIDGET_LABEL, SERIES_COLORS, fnName, safeColor, unitOf, isDiscrete } from '../lib/dashboard.js';
+import { SPARK_RANGES } from '../lib/sparkline.js';
 import { stateMap } from '../lib/format.js';
 import { ColorPicker, SeriesColor } from './ColorPicker.jsx';
 import { PERIODS, MODES } from './widgets/Consumption.jsx';
@@ -109,6 +110,10 @@ export function WidgetEditor({ kind, obj, raw, widgetType, layoutEntry, isNew, e
   const [max, setMax] = useState(base.max ?? '');
   const [hours, setHours] = useState(base.hours ?? 24);
   const [aggr, setAggr] = useState(base.aggr || 'avg');
+  // value: Minigraf (a small curve with MIN / MEDEL / MAX under the value)
+  const [spark, setSpark] = useState(!!base.spark);
+  const [sparkStats, setSparkStats] = useState(base.stats !== false);
+  const canSpark = kind === 'function' && !isDiscrete(obj);
   const [period, setPeriod] = useState(base.period || 'day');
   const [count, setCount] = useState(base.count ?? 7);
   const [mode, setMode] = useState(base.mode || 'counter');
@@ -164,6 +169,7 @@ export function WidgetEditor({ kind, obj, raw, widgetType, layoutEntry, isNew, e
         Object.assign(params, { min: Number(min), max: max === '' ? '' : Number(max) });
       }
       if (type === 'chart') Object.assign(params, { hours: Number(hours), aggr });
+      if (type === 'value') Object.assign(params, spark && canSpark ? { spark: true, hours: Number(hours), stats: sparkStats } : { spark: false });
       if (type === 'consumption') {
         const most = PERIODS.find(([p]) => p === period)[2];
         const n = Math.round(Number(count));
@@ -387,6 +393,43 @@ export function WidgetEditor({ kind, obj, raw, widgetType, layoutEntry, isNew, e
             <input value={release} onChange={(e) => setRelease(e.target.value)} placeholder="t.ex. 0" />
           </Field>
         </div>
+      )}
+      {type === 'value' && canSpark && (
+        <>
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={spark}
+              onChange={(e) => {
+                setSpark(e.target.checked);
+                // the curve and MIN / MEDEL / MAX need two rows
+                if (e.target.checked && Number(h) < 2) setH(2);
+              }}
+            />
+            <span>
+              Minigraf
+              <small className="muted"> · en liten kurva under värdet, med MIN, MEDEL och MAX för perioden (från höjd 2)</small>
+            </span>
+          </label>
+          {spark && (
+            <div className="row gap">
+              <Field label="Period">
+                <select value={hours} onChange={(e) => setHours(e.target.value)}>
+                  {SPARK_RANGES.map(([v, l]) => (
+                    <option key={v} value={v}>
+                      {l}
+                    </option>
+                  ))}
+                  {!SPARK_RANGES.some(([v]) => String(v) === String(hours)) && <option value={hours}>{hours} timmar</option>}
+                </select>
+              </Field>
+              <label className="check">
+                <input type="checkbox" checked={sparkStats} onChange={(e) => setSparkStats(e.target.checked)} />
+                <span>Visa MIN / MEDEL / MAX</span>
+              </label>
+            </div>
+          )}
+        </>
       )}
       {type === 'gauge' && (
         <div className="row gap">
