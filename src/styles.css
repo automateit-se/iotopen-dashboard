@@ -643,8 +643,6 @@ textarea { resize: vertical; min-height: 80px; }
 .thermo-set-val.pending span:first-child { opacity: 0.6; }
 .thermo-modes { flex-wrap: wrap; }
 .thermo-modes button { flex: 1 1 auto; }
-.thermo.act-heating .thermo-set-val span:first-child { color: #ea580c; }
-.thermo.act-cooling .thermo-set-val span:first-child { color: #2563eb; }
 .thermo.is-off .thermo-set-val span:first-child { color: var(--muted); }
 .thermo-modes button:disabled { text-decoration: none; cursor: default; }
 .w-value.has-spark { display: flex; flex-direction: column; gap: 4px; height: 100%; min-height: 0; }
@@ -656,3 +654,25 @@ textarea { resize: vertical; min-height: 80px; }
 .spark-stats > div { display: flex; flex-direction: column; min-width: 0; }
 .spark-label { font-size: 11px; letter-spacing: 0.04em; color: var(--muted); }
 .spark-val { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.thermo.has-graph { height: 100%; min-height: 0; }
+.thermo-graph { display: flex; flex-direction: column; gap: 4px; flex: 1; min-height: 0; }
+.thermo-graph > svg { display: block; width: 100%; flex: 1; min-height: 40px; }
+.thermo-graph-temp { stroke-width: 1.8; stroke-linejoin: round; stroke-linecap: round; }
+.thermo-graph-sp { stroke-width: 2.4; stroke-dasharray: 5 4; stroke-linecap: butt; }
+.thermo-graph-legend { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.thermo-graph-legend > span { display: inline-flex; align-items: center; gap: 6px; }
+.thermo-graph-legend svg { width: 20px; height: 6px; overflow: visible; }
+.thermo-graph-range { font-variant-numeric: tabular-nums; }
+.thermo-dial { position: relative; width: 100%; max-width: 240px; margin: 0 auto; touch-action: none; user-select: none; -webkit-user-select: none; }
+.thermo-dial svg { display: block; width: 100%; height: auto; overflow: visible; cursor: pointer; }
+.thermo-dial svg:focus { outline: none; }
+.thermo-dial svg:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 50%; }
+.thermo-dial svg[aria-disabled='true'] { cursor: default; opacity: 0.6; }
+.thermo-dial-track { fill: none; stroke: var(--surface-2); stroke-linecap: round; }
+.thermo-dial-fill { fill: none; stroke-linecap: round; }
+.thermo-dial-now { stroke: var(--text); stroke-width: 3; stroke-linecap: round; }
+.thermo-dial-knob { stroke: var(--surface); stroke-width: 4; cursor: grab; }
+.thermo-dial.dragging .thermo-dial-knob { cursor: grabbing; }
+.thermo-dial-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; text-align: center; line-height: 1.15; }
+.thermo-dial-set { font-size: 32px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--tile-color, var(--data)); }
+.thermo-dial-zone { font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }

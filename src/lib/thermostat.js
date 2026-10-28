@@ -106,3 +106,71 @@ export function stepSetpoint(current, steps, { min, max, step }) {
   const decimals = (String(s).split('.')[1] || '').length;
   return Number(Math.min(max, Math.max(min, v)).toFixed(decimals));
 }
+
+// ---- colour zones for the set point (layout "zones") -------------------------------------------------------
+// Each zone runs up to (not including) `to`; the last has no `to`. The set point, its line in the Minigraf and the
+// dial take the colour of the zone the set point is in.
+
+export const DEFAULT_ZONES = [
+  { to: 15, color: '#2b6fd6', text: 'Svalt' },
+  { to: 20, color: '#18a058', text: 'Komfort' },
+  { to: 22, color: '#ea7a12', text: 'Varmt' },
+  { color: '#d43c2f', text: 'Hett' },
+];
+
+/** The zones of a widget: its own (layout "zones") when valid, sorted, with an open last zone; else the defaults. */
+export function zonesOf(list) {
+  if (!Array.isArray(list) || !list.length) return DEFAULT_ZONES;
+  const rows = list
+    .filter((z) => z && typeof z.color === 'string' && z.color.trim())
+    .map((z) => ({ to: z.to === '' || z.to === null || z.to === undefined ? undefined : Number(z.to), color: z.color.trim(), text: String(z.text || '').trim() }))
+    .filter((z) => z.to === undefined || Number.isFinite(z.to));
+  if (!rows.length) return DEFAULT_ZONES;
+  const bounded = rows.filter((z) => z.to !== undefined).sort((a, b) => a.to - b.to);
+  const open = rows.find((z) => z.to === undefined) || { ...bounded.pop(), to: undefined };
+  return [...bounded, { ...open, to: undefined }];
+}
+
+/** The zone a value is in. */
+export const zoneFor = (value, zones = DEFAULT_ZONES) => zones.find((z) => z.to === undefined || value < z.to) || zones[zones.length - 1];
+
+/**
+ * The set point's history as a step line split where the zone changes: [{ d, color }] in a box of width × height.
+ * `points` are { ts, value } sorted by time; each value holds until the next one, the last until `to`.
+ * `lo` / `hi`: the y range (shared with the temperature line).
+ */
+export function setpointSegments(points, from, to, lo, hi, zones = DEFAULT_ZONES, width = 100, height = 40) {
+  const p = points.filter((x) => Number.isFinite(x.value) && x.ts <= to);
+  // the value at the start of the window: the last one before it
+  const before = p.filter((x) => x.ts < from).pop();
+  const inside = p.filter((x) => x.ts >= from);
+  const steps = before ? [{ ts: from, value: before.value }, ...inside] : inside;
+  if (!steps.length || to <= from || hi <= lo) return [];
+  const X = (t) => (((t - from) / (to - from)) * width).toFixed(2);
+  const Y = (v) => (height - ((v - lo) / (hi - lo)) * height).toFixed(2);
+  const out = [];
+  steps.forEach((s, i) => {
+    const end = i + 1 < steps.length ? steps[i + 1].ts : to;
+    const color = zoneFor(s.value, zones).color;
+    const last = out[out.length - 1];
+    // one path per run of the same colour; the vertical step belongs to the new value's colour
+    if (last && last.color === color) last.d += ` V${Y(s.value)} H${X(end)}`;
+    else out.push({ d: `M${X(s.ts)},${Y(i ? steps[i - 1].value : s.value)} V${Y(s.value)} H${X(end)}`, color });
+  });
+  return out;
+}
+
+/**
+ * Dial geometry: the value at a point (x, y relative to the centre, y down) on a ring that starts at `start`
+ * degrees (0 = right, clockwise) and sweeps `sweep` degrees from min to max, snapped to the step.
+ */
+export function dialValueAt(x, y, { min, max, step }, start = 135, sweep = 270) {
+  let deg = (Math.atan2(y, x) * 180) / Math.PI;
+  const gap = (360 - sweep) / 2;
+  while (deg < start - gap) deg += 360;
+  while (deg > start + sweep + gap) deg -= 360;
+  const t = Math.max(0, Math.min(1, (deg - start) / sweep));
+  const s = step > 0 ? step : 0.5;
+  const decimals = (String(s).split('.')[1] || '').length;
+  return Number(Math.min(max, Math.max(min, min + Math.round((t * (max - min)) / s) * s)).toFixed(decimals));
+}

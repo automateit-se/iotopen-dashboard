@@ -167,6 +167,10 @@ function signal(iid, topic, gen) {
   fn(iid, hall, 'text', 'Termostat hall Läge', `${tp}/mode`, { topic_write: `set/${tp}/mode`, 'ha.hvac_modes': 'off,heat,auto', 'ha.part': 'mode' });
   fn(iid, hall, 'text', 'Termostat hall Drift', `${tp}/action`, { 'ha.part': 'action' });
   thermostats.set(tp, { iid, client: 5001 });
+  // a day schedule for the history: 19 at night, 21 in the morning, 20 during the day, 22.5 in the evening
+  const tsp = (ts) => { const h = new Date(ts * 1000).getHours(); return h < 6 ? 19 : h < 9 ? 21 : h < 16 ? 20 : h < 22 ? 22.5 : 19; };
+  signal(iid, `${tp}/target`, tsp);
+  signal(iid, `${tp}/current`, (ts) => tsp(ts - 2700) - 0.3 + 0.25 * Math.sin(ts / 2000));
   for (const [topic, value, msg] of [[`${tp}/current`, 20.6, ''], [`${tp}/target`, 21, ''], [`${tp}/mode`, 'heat', 'heat'], [`${tp}/action`, 'heating', 'heating']]) setStatus({ client_id: 5001, installation_id: iid, topic, value, msg, timestamp: now() - 300 });
   for (const [topic, v] of [['obj/zwave/12/setpoint', 21.5], ['obj/zwave/20/state', 0], ['obj/vent/1/state', 1]]) setStatus({ client_id: 5001, installation_id: iid, topic, value: v, msg: '', timestamp: now() - 600 });
 }

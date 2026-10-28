@@ -6,6 +6,7 @@ import { AGGR_METHODS } from '../lib/history.js';
 import { STATUS_META, STATUS_TEXT, parseLimits } from '../lib/status.js';
 import { FUNCTION_WIDGETS, DEVICE_WIDGETS, DEFAULT_LAYOUT, OBJ_META, WIDTH_OPTIONS, HALF_HEIGHT_TYPES, heightOptions, writeTopic, onOffTopics, controlTopic, topicKeys, isHidden, stateColorKey, widgetTypes, WIDGET_LABEL, SERIES_COLORS, fnName, safeColor, unitOf, isDiscrete } from '../lib/dashboard.js';
 import { SPARK_RANGES } from '../lib/sparkline.js';
+import { DEFAULT_ZONES, zonesOf } from '../lib/thermostat.js';
 import { stateMap } from '../lib/format.js';
 import { ColorPicker, SeriesColor } from './ColorPicker.jsx';
 import { PERIODS, MODES } from './widgets/Consumption.jsx';
@@ -114,6 +115,14 @@ export function WidgetEditor({ kind, obj, raw, widgetType, layoutEntry, isNew, e
   const [spark, setSpark] = useState(!!base.spark);
   const [sparkStats, setSparkStats] = useState(base.stats !== false);
   const canSpark = kind === 'function' && !isDiscrete(obj);
+  // thermostat: buttons or dial, Minigraf (shares spark / hours), the temperature line's colour and the zones
+  const [view, setView] = useState(base.view === 'dial' ? 'dial' : 'buttons');
+  const [tempColor, setTempColor] = useState(base.tempColor || '');
+  const [zoneRows, setZoneRows] = useState(() => zonesOf(base.zones).map((z) => ({ to: z.to === undefined ? '' : String(z.to), text: z.text, color: z.color })));
+  const setZone = (i, patch) => setZoneRows((rows) => rows.map((z, j) => (j === i ? { ...z, ...patch } : z)));
+  // the least height a thermostat needs: buttons 2 rows, the dial 3, plus 1 for the Minigraf
+  const thermoHeight = (v, sp) => (v === 'dial' ? 3 : 2) + (sp ? 1 : 0);
+  const fitThermo = (v, sp) => Number(h) < thermoHeight(v, sp) && setH(thermoHeight(v, sp));
   const [period, setPeriod] = useState(base.period || 'day');
   const [count, setCount] = useState(base.count ?? 7);
   const [mode, setMode] = useState(base.mode || 'counter');
@@ -169,6 +178,26 @@ export function WidgetEditor({ kind, obj, raw, widgetType, layoutEntry, isNew, e
         Object.assign(params, { min: Number(min), max: max === '' ? '' : Number(max) });
       }
       if (type === 'chart') Object.assign(params, { hours: Number(hours), aggr });
+      if (type === 'thermostat') {
+        const rows = zoneRows.map((z, i) => ({ ...z, last: i === zoneRows.length - 1 }));
+        const zones = [];
+        let prev = -Infinity;
+        for (const z of rows) {
+          if (!safeColor(z.color)) throw new Error(`Zon "${z.text || zones.length + 1}": "${z.color}" är ingen giltig färg.`);
+          if (z.last) {
+            zones.push({ color: z.color.trim(), text: z.text.trim() });
+            break;
+          }
+          const to = Number(String(z.to).replace(',', '.'));
+          if (String(z.to).trim() === '' || !Number.isFinite(to)) throw new Error(`Zon "${z.text || zones.length + 1}": ange en övre gräns i grader.`);
+          if (to <= prev) throw new Error('Zonernas gränser måste öka nedåt i listan.');
+          prev = to;
+          zones.push({ to, color: z.color.trim(), text: z.text.trim() });
+        }
+        const tc = tempColor.trim();
+        if (tc && !safeColor(tc)) throw new Error(`"${tc}" är ingen giltig färg för temperaturlinjen.`);
+        Object.assign(params, { view, spark, hours: Number(hours), tempColor: tc, zones });
+      }
       if (type === 'value') Object.assign(params, spark && canSpark ? { spark: true, hours: Number(hours), stats: sparkStats } : { spark: false });
       if (type === 'consumption') {
         const most = PERIODS.find(([p]) => p === period)[2];
@@ -393,6 +422,87 @@ export function WidgetEditor({ kind, obj, raw, widgetType, layoutEntry, isNew, e
             <input value={release} onChange={(e) => setRelease(e.target.value)} placeholder="t.ex. 0" />
           </Field>
         </div>
+      )}
+      {type === 'thermostat' && (
+        <>
+          <Field label="Visning">
+            <div className="seg">
+              {[
+                ['buttons', 'Knappar'],
+                ['dial', 'Ratt'],
+              ].map(([v, l]) => (
+                <button
+                  key={v}
+                  type="button"
+                  className={view === v ? 'on' : ''}
+                  onClick={() => {
+                    setView(v);
+                    fitThermo(v, spark);
+                  }}
+                >
+                  {l}
+                </button>
+              ))}
+            </div>
+          </Field>
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={spark}
+              onChange={(e) => {
+                setSpark(e.target.checked);
+                if (e.target.checked) fitThermo(view, true);
+              }}
+            />
+            <span>
+              Minigraf
+              <small className="muted"> · temperaturen som heldragen linje och börvärdet som streckad linje i zonens färg (en rad till på höjden)</small>
+            </span>
+          </label>
+          {spark && (
+            <>
+              <Field label="Period">
+                <select value={hours} onChange={(e) => setHours(e.target.value)}>
+                  {SPARK_RANGES.map(([v, l]) => (
+                    <option key={v} value={v}>
+                      {l}
+                    </option>
+                  ))}
+                  {!SPARK_RANGES.some(([v]) => String(v) === String(hours)) && <option value={hours}>{hours} timmar</option>}
+                </select>
+              </Field>
+              <Field label="Temperaturlinjens färg" help="Standard = widgetens färg.">
+                <ColorPicker value={tempColor} onChange={setTempColor} />
+              </Field>
+            </>
+          )}
+          <Field label="Färgzoner för börvärdet" help="Börvärdet, dess linje i minigrafen och ratten får färgen för zonen som börvärdet ligger i. Varje zon gäller under sin gräns; den sista gäller resten.">
+            <div className="state-rows">
+              {zoneRows.map((z, i) => (
+                <div key={i} className="state-row zone-row">
+                  {i < zoneRows.length - 1 ? (
+                    <input value={z.to} onChange={(e) => setZone(i, { to: e.target.value })} inputMode="decimal" placeholder="Under °C" aria-label={`Övre gräns för zon ${i + 1}`} />
+                  ) : (
+                    <span className="muted small">och över</span>
+                  )}
+                  <input value={z.text} onChange={(e) => setZone(i, { text: e.target.value })} placeholder="Namn" aria-label={`Namn på zon ${i + 1}`} />
+                  <SeriesColor value={z.color} fallback="#18a058" onChange={(c) => setZone(i, { color: c || DEFAULT_ZONES[Math.min(i, DEFAULT_ZONES.length - 1)].color })} label={z.text || `zon ${i + 1}`} />
+                  <button type="button" className="link-btn small" disabled={zoneRows.length <= 2} onClick={() => setZoneRows((rows) => rows.filter((_, j) => j !== i))} aria-label={`Ta bort zon ${i + 1}`}>
+                    Ta bort
+                  </button>
+                </div>
+              ))}
+              <div className="row gap">
+                <button type="button" className="btn small-btn" onClick={() => setZoneRows((rows) => [...rows.slice(0, -1), { to: '', text: '', color: '#7c3aed' }, rows[rows.length - 1]])}>
+                  <Icon name="plus" size={14} /> Lägg till zon
+                </button>
+                <button type="button" className="link-btn small" onClick={() => setZoneRows(DEFAULT_ZONES.map((z) => ({ to: z.to === undefined ? '' : String(z.to), text: z.text, color: z.color })))}>
+                  Återställ standard
+                </button>
+              </div>
+            </div>
+          </Field>
+        </>
       )}
       {type === 'value' && canSpark && (
         <>
