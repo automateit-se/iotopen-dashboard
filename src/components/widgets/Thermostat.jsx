@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { normTopic } from '../../api/lynx.js';
+import { lynx, normTopic } from '../../api/lynx.js';
 import { formatAge, formatValue } from '../../lib/format.js';
 import { fnName, rangeOf, safeColor, writeTopic } from '../../lib/dashboard.js';
 import { loadHistory } from '../../lib/history.js';
@@ -97,7 +97,7 @@ function Dial({ value, current, range, color, zone, off, disabled, label, curren
 
 // ---- Minigraf (layout "spark"): the temperature as a line in a fixed colour, the set point as a dashed step line
 // in its zone colours -----------------------------------------------------------------------------------------
-function ThermoGraph({ t, ctx, iid, hours, tempColor, zones, current, target }) {
+function ThermoGraph({ t, ctx, iid, hours, tempColor, zones, current, target, reported }) {
   const curTopic = t.current ? normTopic(t.current.meta?.topic_read) : '';
   const tgtTopic = t.target ? normTopic(t.target.meta?.topic_read) : '';
   const [data, setData] = useState(null); // { temp: [], sp: [] }
@@ -112,9 +112,17 @@ function ThermoGraph({ t, ctx, iid, hours, tempColor, zones, current, target }) 
     const to = Date.now() / 1000;
     const from = to - hours * 3600;
     const load = (topic, method) => (topic ? loadHistory(iid, ctx.inst?.client_id, [topic], from, to, { mode: 'numeric', method }).then((h) => h.byTopic.get(topic) || []) : Promise.resolve([]));
+    // a set point is logged only when it changes, often weeks apart: the value in force when the window starts is
+    // the last one logged before it (up to a year back)
+    const before = tgtTopic
+      ? lynx
+          .log(iid, { from: Math.floor(from - 365 * 86400), to: Math.floor(from) - 1, topics: [ctx.inst?.client_id ? `${ctx.inst.client_id}/${tgtTopic}` : tgtTopic], limit: 1, order: 'desc' })
+          .then((r) => r?.data?.[0] || null)
+          .catch(() => null)
+      : Promise.resolve(null);
     // the set point changes in steps: the last value per interval keeps them sharp
-    Promise.all([load(curTopic, 'avg'), load(tgtTopic, 'last')])
-      .then(([temp, sp]) => alive && setData({ temp, sp }))
+    Promise.all([load(curTopic, 'avg'), load(tgtTopic, 'last'), before])
+      .then(([temp, sp, b]) => alive && setData({ temp, sp: b && Number.isFinite(Number(b.value)) ? [{ ts: b.timestamp, value: Number(b.value) }, ...sp] : sp }))
       .catch((e) => alive && setErr(e.status === 403 ? 'Saknar behörighet till loggen' : 'Kunde inte läsa historiken'));
     const off = ctx.onLive((e) => {
       if ((e.topic !== curTopic && e.topic !== tgtTopic) || !Number.isFinite(Number(e.value))) return;
@@ -137,9 +145,14 @@ function ThermoGraph({ t, ctx, iid, hours, tempColor, zones, current, target }) 
     // both lines run to now: the latest values hold until the next ones
     const temp = data.temp.filter((x) => x.ts >= from - 1);
     if (Number.isFinite(current) && (!temp.length || temp[temp.length - 1].ts < now)) temp.push({ ts: now, value: current });
-    // the set point line starts where its history starts: nothing is drawn for time without values
-    const sp = data.sp;
-    const vals = [...temp.map((x) => x.value), ...sp.filter((x) => x.ts >= from).map((x) => x.value)].filter(Number.isFinite);
+    // the set point: its history, from the value in force when the window starts. With nothing logged at all, the
+    // thermostat's reported set point holds since it was reported (or the whole window); otherwise the line starts
+    // where its history starts
+    let sp = data.sp;
+    if (!sp.length && reported && Number.isFinite(reported.value)) sp = [{ ts: Math.max(from, reported.ts || from), value: reported.value }];
+    // the y range covers the set point in force at the start too, not only its changes inside the window
+    const inForce = sp.filter((x) => x.ts < from).pop();
+    const vals = [...temp.map((x) => x.value), ...(inForce ? [inForce.value] : []), ...sp.filter((x) => x.ts >= from).map((x) => x.value)].filter(Number.isFinite);
     if (!vals.length) return null;
     let lo = Math.min(...vals);
     let hi = Math.max(...vals);
@@ -156,7 +169,7 @@ function ThermoGraph({ t, ctx, iid, hours, tempColor, zones, current, target }) 
       tp = { line, area: `${line} L${X(pts[pts.length - 1].ts)},40 L${X(pts[0].ts)},40 Z` };
     }
     return { tp, segs: setpointSegments(sp, from, now, lo, hi, zones, 100, 40), lo, hi };
-  }, [data, from, now, current, target, zones]);
+  }, [data, from, now, current, target, zones, reported?.value, reported?.ts]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (err) return <div className="thermo-graph muted small">{err}</div>;
   return (
@@ -340,7 +353,7 @@ export function ThermostatWidget({ w, ctx, iid }) {
           ))}
         </div>
       )}
-      {graph && <ThermoGraph t={t} ctx={ctx} iid={iid} hours={Number(w.layout.hours) || 24} tempColor={tempColor} zones={zones} current={num(curV)} target={shown} />}
+      {graph && <ThermoGraph t={t} ctx={ctx} iid={iid} hours={Number(w.layout.hours) || 24} tempColor={tempColor} zones={zones} current={num(curV)} target={shown} reported={tgtV ? { value: num(tgtV), ts: tgtV.timestamp } : null} />}
       <div className="muted small thermo-status">
         {[action ? actionText(action) : '', lastTs ? formatAge(lastTs) : ''].filter(Boolean).join(' · ')}
       </div>
