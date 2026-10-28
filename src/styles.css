@@ -148,7 +148,7 @@ input:focus, select:focus, textarea:focus, button:focus-visible { outline: 2px s
 .page-head h1 { color: var(--title-color, var(--heading)); }
 /* pages: tabs under the title */
 .page-tabs { display: flex; align-items: center; gap: 8px; margin: -4px 0 16px; border-bottom: 1px solid var(--border); }
-.page-tab-list { display: flex; gap: 4px; overflow-x: auto; flex: 1; min-width: 0; scrollbar-width: thin; }
+.page-tab-list { display: flex; gap: 4px; overflow-x: auto; overflow-y: hidden; flex: 1; min-width: 0; scrollbar-width: thin; }
 .page-tab { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; white-space: nowrap; color: var(--muted); text-decoration: none; border-bottom: 2px solid transparent; margin-bottom: -1px; font-weight: 500; }
 .page-tab:hover { color: var(--text); }
 .page-tab.on { color: var(--heading); border-bottom-color: var(--data); }
@@ -590,8 +590,8 @@ textarea { resize: vertical; min-height: 80px; }
   --border: rgba(255, 255, 255, 0.28); --surface-2: rgba(255, 255, 255, 0.14);
   color: var(--text); text-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
 }
-.page.has-bg > .page-head .btn:not(.primary) { background: rgba(255, 255, 255, 0.14); border-color: rgba(255, 255, 255, 0.3); color: #fff; text-shadow: none; }
-.page.has-bg > .page-head .btn:not(.primary):hover:not(:disabled) { background: rgba(255, 255, 255, 0.24); }
+.page.has-bg > .page-head .btn:not(.primary), .page.has-bg > .page-tabs .btn:not(.primary) { background: rgba(255, 255, 255, 0.14); border-color: rgba(255, 255, 255, 0.3); color: #fff; text-shadow: none; }
+.page.has-bg > .page-head .btn:not(.primary):hover:not(:disabled), .page.has-bg > .page-tabs .btn:not(.primary):hover:not(:disabled) { background: rgba(255, 255, 255, 0.24); }
 .page.has-bg > .page-head .btn, .page.has-bg > .page-tabs .btn { text-shadow: none; }
 .page.has-bg > .page-tabs .page-tab.on { border-bottom-color: #fff; }
 .page.has-bg > .page-tabs .icon-btn { color: rgba(255, 255, 255, 0.85); }
