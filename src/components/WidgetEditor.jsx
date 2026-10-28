@@ -120,9 +120,9 @@ export function WidgetEditor({ kind, obj, raw, widgetType, layoutEntry, isNew, e
   const [tempColor, setTempColor] = useState(base.tempColor || '');
   const [zoneRows, setZoneRows] = useState(() => zonesOf(base.zones).map((z) => ({ to: z.to === undefined ? '' : String(z.to), text: z.text, color: z.color })));
   const setZone = (i, patch) => setZoneRows((rows) => rows.map((z, j) => (j === i ? { ...z, ...patch } : z)));
-  // the least height a thermostat needs: buttons 2 rows, the dial 3, plus 1 for the Minigraf
-  const thermoHeight = (v, sp) => (v === 'dial' ? 3 : 2) + (sp ? 1 : 0);
-  const fitThermo = (v, sp) => Number(h) < thermoHeight(v, sp) && setH(thermoHeight(v, sp));
+  // the least height a thermostat needs: buttons 2 rows, the dial 3; the Minigraf takes the space left
+  const thermoHeight = (v) => (v === 'dial' ? 3 : 2);
+  const fitThermo = (v) => Number(h) < thermoHeight(v) && setH(thermoHeight(v));
   const [period, setPeriod] = useState(base.period || 'day');
   const [count, setCount] = useState(base.count ?? 7);
   const [mode, setMode] = useState(base.mode || 'counter');
@@ -456,7 +456,7 @@ export function WidgetEditor({ kind, obj, raw, widgetType, layoutEntry, isNew, e
             />
             <span>
               Minigraf
-              <small className="muted"> · temperaturen som heldragen linje och börvärdet som streckad linje i zonens färg (en rad till på höjden)</small>
+              <small className="muted"> · temperaturen som heldragen linje och börvärdet som streckad linje i zonens färg (tar platsen som blir över, mer höjd ger en större graf)</small>
             </span>
           </label>
           {spark && (

@@ -3,18 +3,13 @@ import { normTopic } from '../../api/lynx.js';
 import { formatAge, formatValue } from '../../lib/format.js';
 import { fnName, rangeOf, safeColor, writeTopic } from '../../lib/dashboard.js';
 import { loadHistory } from '../../lib/history.js';
-import { actionText, dialValueAt, modeText, setpointSegments, stepSetpoint, thermostatFunctions, thermostatModes, zoneFor, zonesOf } from '../../lib/thermostat.js';
+import { actionText, textValue, dialValueAt, modeText, setpointSegments, stepSetpoint, thermostatFunctions, thermostatModes, zoneFor, zonesOf } from '../../lib/thermostat.js';
 import { Icon } from '../icons.jsx';
 
 const SEND_DELAY = 800; // ms after the last − / + press, so a few presses give one command
 const PENDING_TIMEOUT = 8000; // back to the reported setpoint if the thermostat does not answer
 
-/** A text value (mode, action): the value when it is text, else the msg. IoT Open's status API can return 0 for text. */
-const textOf = (v) => {
-  if (!v) return '';
-  const s = typeof v.value === 'string' && !Number.isFinite(Number(v.value)) ? v.value : v.msg;
-  return String(s || '').trim();
-};
+const textOf = textValue;
 
 const num = (v) => (v && v.value !== '' && v.value !== null && Number.isFinite(Number(v.value)) ? Number(v.value) : NaN);
 
@@ -34,10 +29,11 @@ function Dial({ value, current, range, color, zone, off, disabled, label, curren
   const ref = useRef(null);
   const [dragging, setDragging] = useState(false);
   const angle = (v) => DIAL.start + ((Math.min(range.max, Math.max(range.min, v)) - range.min) / (range.max - range.min)) * DIAL.sweep;
+  // the ring is drawn centred in the svg box and scaled to its smaller side (it shrinks to fit the widget)
   const at = (e) => {
     const b = ref.current.getBoundingClientRect();
-    const k = DIAL.size / b.width;
-    return dialValueAt((e.clientX - b.left) * k - DIAL.size / 2, (e.clientY - b.top) * k - DIAL.size / 2, range, DIAL.start, DIAL.sweep);
+    const k = DIAL.size / Math.min(b.width, b.height);
+    return dialValueAt((e.clientX - b.left - b.width / 2) * k, (e.clientY - b.top - b.height / 2) * k, range, DIAL.start, DIAL.sweep);
   };
   const has = Number.isFinite(value);
   const [kx, ky] = polar(angle(has ? value : range.min), DIAL.r);
@@ -141,9 +137,8 @@ function ThermoGraph({ t, ctx, iid, hours, tempColor, zones, current, target }) 
     // both lines run to now: the latest values hold until the next ones
     const temp = data.temp.filter((x) => x.ts >= from - 1);
     if (Number.isFinite(current) && (!temp.length || temp[temp.length - 1].ts < now)) temp.push({ ts: now, value: current });
-    let sp = data.sp;
-    if (!sp.length && Number.isFinite(target)) sp = [{ ts: from, value: target }];
-    else if (sp.length && sp[0].ts > from) sp = [{ ts: from, value: sp[0].value }, ...sp];
+    // the set point line starts where its history starts: nothing is drawn for time without values
+    const sp = data.sp;
     const vals = [...temp.map((x) => x.value), ...sp.filter((x) => x.ts >= from).map((x) => x.value)].filter(Number.isFinite);
     if (!vals.length) return null;
     let lo = Math.min(...vals);
@@ -251,7 +246,8 @@ export function ThermostatWidget({ w, ctx, iid }) {
   const setColor = off || !zone ? undefined : zone.color;
   const dial = w.layout.view === 'dial' && !!t.target;
   const h = Number(w.layout.h) || 1;
-  const graph = !!w.layout.spark && (t.current || t.target) && h >= (dial ? 4 : 3);
+  // the graph takes the space left: from height 2 with buttons, 3 with the dial
+  const graph = !!w.layout.spark && (t.current || t.target) && h >= (dial ? 3 : 2);
   const tempColor = safeColor(w.layout.tempColor) || 'var(--tile-color, var(--data))';
 
   const press = (steps) => {
@@ -291,7 +287,7 @@ export function ThermostatWidget({ w, ctx, iid }) {
   const fmt = (fn, v) => (Number.isFinite(v) ? formatValue(fn, v) : '–');
 
   return (
-    <div className={`thermo ${off ? 'is-off' : ''} ${graph ? 'has-graph' : ''}`}>
+    <div className={`thermo ${off ? 'is-off' : ''} ${graph ? 'has-graph' : ''} ${dial ? 'has-dial' : ''}`}>
       {dial && (
         <Dial
           value={shown}
@@ -334,7 +330,8 @@ export function ThermostatWidget({ w, ctx, iid }) {
           </div>
         )}
       </div>}
-      {t.mode && modes.length > 0 && (
+      {/* the current mode is in the widget's header; one mode is nothing to choose between, so no buttons */}
+      {t.mode && modes.length > 1 && (
         <div className="thermo-modes seg" role="group" aria-label="Läge">
           {modes.map((m) => (
             <button key={m} type="button" className={m.toLowerCase() === mode.toLowerCase() ? 'on' : ''} aria-pressed={m.toLowerCase() === mode.toLowerCase()} disabled={!modeWrite} onClick={() => setMode(m)}>
@@ -345,7 +342,7 @@ export function ThermostatWidget({ w, ctx, iid }) {
       )}
       {graph && <ThermoGraph t={t} ctx={ctx} iid={iid} hours={Number(w.layout.hours) || 24} tempColor={tempColor} zones={zones} current={num(curV)} target={shown} />}
       <div className="muted small thermo-status">
-        {[t.mode && !modes.length && mode ? modeText(mode) : '', action ? actionText(action) : '', lastTs ? formatAge(lastTs) : ''].filter(Boolean).join(' · ')}
+        {[action ? actionText(action) : '', lastTs ? formatAge(lastTs) : ''].filter(Boolean).join(' · ')}
       </div>
       {err && <div className="err small">{err}</div>}
     </div>
