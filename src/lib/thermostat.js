@@ -89,6 +89,19 @@ const ACTION_SV = {
   unknown: 'Okänt',
 };
 
+/** A text value (mode, action): the value when it is text, else the msg. IoT Open's status API can return 0 for text. */
+export const textValue = (v) => {
+  if (!v) return '';
+  const s = typeof v.value === 'string' && !Number.isFinite(Number(v.value)) ? v.value : v.msg;
+  return String(s || '').trim();
+};
+
+/** The thermostat's current mode in Swedish, for the widget's header ('' when unknown). */
+export function currentModeText(raw, deviceId, valueOf) {
+  const t = thermostatFunctions(raw, deviceId);
+  return t.mode ? modeText(textValue(valueOf(t.mode))) : '';
+}
+
 /** Swedish text for a Home Assistant HVAC mode, or the mode itself. */
 export const modeText = (s) => MODE_SV[String(s || '').trim().toLowerCase()] || String(s || '').trim();
 /** Swedish text for a Home Assistant HVAC action, or the action itself. */

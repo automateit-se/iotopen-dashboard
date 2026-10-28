@@ -3,18 +3,13 @@ import { normTopic } from '../../api/lynx.js';
 import { formatAge, formatValue } from '../../lib/format.js';
 import { fnName, rangeOf, safeColor, writeTopic } from '../../lib/dashboard.js';
 import { loadHistory } from '../../lib/history.js';
-import { actionText, dialValueAt, modeText, setpointSegments, stepSetpoint, thermostatFunctions, thermostatModes, zoneFor, zonesOf } from '../../lib/thermostat.js';
+import { actionText, textValue, dialValueAt, modeText, setpointSegments, stepSetpoint, thermostatFunctions, thermostatModes, zoneFor, zonesOf } from '../../lib/thermostat.js';
 import { Icon } from '../icons.jsx';
 
 const SEND_DELAY = 800; // ms after the last − / + press, so a few presses give one command
 const PENDING_TIMEOUT = 8000; // back to the reported setpoint if the thermostat does not answer
 
-/** A text value (mode, action): the value when it is text, else the msg. IoT Open's status API can return 0 for text. */
-const textOf = (v) => {
-  if (!v) return '';
-  const s = typeof v.value === 'string' && !Number.isFinite(Number(v.value)) ? v.value : v.msg;
-  return String(s || '').trim();
-};
+const textOf = textValue;
 
 const num = (v) => (v && v.value !== '' && v.value !== null && Number.isFinite(Number(v.value)) ? Number(v.value) : NaN);
 
@@ -335,7 +330,7 @@ export function ThermostatWidget({ w, ctx, iid }) {
           </div>
         )}
       </div>}
-      {/* one mode is nothing to choose between: it is shown as text in the status line instead */}
+      {/* the current mode is in the widget's header; one mode is nothing to choose between, so no buttons */}
       {t.mode && modes.length > 1 && (
         <div className="thermo-modes seg" role="group" aria-label="Läge">
           {modes.map((m) => (
@@ -347,7 +342,7 @@ export function ThermostatWidget({ w, ctx, iid }) {
       )}
       {graph && <ThermoGraph t={t} ctx={ctx} iid={iid} hours={Number(w.layout.hours) || 24} tempColor={tempColor} zones={zones} current={num(curV)} target={shown} />}
       <div className="muted small thermo-status">
-        {[t.mode && modes.length <= 1 && mode ? modeText(mode) : '', action ? actionText(action) : '', lastTs ? formatAge(lastTs) : ''].filter(Boolean).join(' · ')}
+        {[action ? actionText(action) : '', lastTs ? formatAge(lastTs) : ''].filter(Boolean).join(' · ')}
       </div>
       {err && <div className="err small">{err}</div>}
     </div>

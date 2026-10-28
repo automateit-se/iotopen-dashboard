@@ -18,6 +18,7 @@ import { config } from '../api/config.js';
 import { localPages, startPage, excludedTypes } from '../lib/local.js';
 import { useLocalStatus } from '../components/LocalBar.jsx';
 import { worstStatus, staleOf, staleDevice } from '../lib/status.js';
+import { currentModeText } from '../lib/thermostat.js';
 import { errText } from '../components/Modal.jsx';
 import { Icon } from '../components/icons.jsx';
 import { INST_META, OBJ_META, GROUPS, WIDGET_LABEL, THEME_META, EXTRA_FIELDS, applyTheme, isAdmin, writeLayout, writeObjectMeta, suggestType, widgetFunctions, fnName, stateColor, isLight, newLinkKey, newExtraKey, newTextKey, widgetTypes, widgetKey, keyOf, pagesOf, pageOfWidget, newPageId, writeBackground } from '../lib/dashboard.js';
@@ -475,6 +476,11 @@ export default function Dashboard({ iid, pageId = '' }) {
                 <header>
                   {w.icon && !bare && <Icon name={w.icon} size={18} className="tile-icon" />}
                   {bare ? <span className="grow" /> : <h3 title={w.name}>{w.name}</h3>}
+                  {w.type === 'thermostat' && (() => {
+                    // the thermostat's current mode, at the right of its name
+                    const mode = currentModeText(raw, w.obj.id, ctx.valueOf);
+                    return mode ? <span className="tile-head-text">{mode}</span> : null;
+                  })()}
                   {stale && (
                     <span className="stale-badge" title={`metric_monitor: ${stale.text}`}>
                       Tyst
