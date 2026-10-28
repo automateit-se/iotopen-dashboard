@@ -250,7 +250,8 @@ export function ThermostatWidget({ w, ctx, iid }) {
   const setColor = off || !zone ? undefined : zone.color;
   const dial = w.layout.view === 'dial' && !!t.target;
   const h = Number(w.layout.h) || 1;
-  const graph = !!w.layout.spark && (t.current || t.target) && h >= (dial ? 4 : 3);
+  // the graph takes the space left: from height 2 with buttons, 3 with the dial
+  const graph = !!w.layout.spark && (t.current || t.target) && h >= (dial ? 3 : 2);
   const tempColor = safeColor(w.layout.tempColor) || 'var(--tile-color, var(--data))';
 
   const press = (steps) => {
