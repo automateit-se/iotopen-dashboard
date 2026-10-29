@@ -259,6 +259,20 @@ li.stale .val, .tl-label.stale .tl-now { opacity: 0.45; }
 .w-status .dot.on { background: var(--tile-color); box-shadow: 0 0 0 4px color-mix(in srgb, var(--tile-color) 22%, transparent); }
 .w-status .dot.off { background: var(--off); }
 .w-status .dot.none { background: transparent; border: 2px dashed var(--off); }
+/* long state texts: the text takes the room the widget has (and shrinks to it), the time line always shows */
+.tile-body > .w-status, .tile-body > .w-value.fits { flex: 1; min-height: 0; min-width: 0; }
+.tile.half .w-status-text { height: auto; }
+.tile.half .fit { min-width: 0; max-width: 100%; }
+.w-status-text { flex: 1; min-width: 0; height: 100%; display: flex; flex-direction: column; justify-content: center; gap: 2px; }
+.w-value.fits { display: flex; flex-direction: column; justify-content: center; gap: 2px; }
+.w-status-text > .muted, .w-value.fits > .muted { flex: none; }
+.fit { flex: 0 1 auto; min-height: 0; overflow: hidden; }
+.fit.fit-cut:not(.fit-single) { display: -webkit-box; -webkit-box-orient: vertical; }
+.fit.fit-single { white-space: nowrap; }
+.fit.fit-single.fit-cut { text-overflow: ellipsis; }
+.fit.fit-click { cursor: pointer; }
+.fit.fit-click:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+.fit-full { font-size: 18px; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; margin: 0 0 8px; }
 
 .toggle-wrap { display: inline-flex; align-items: center; gap: 6px; }
 .toggle {

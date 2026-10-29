@@ -116,6 +116,13 @@ function signal(iid, topic, gen) {
   signal(iid, 'obj/smhi/temp', (ts) => 8 + 4 * Math.sin(ts / 30000) + Math.random() * 0.4);
   // edge client: online state published as a bare, retained "1" (no JSON, no timestamp)
   const edge = dev(iid, 'edge_client', 'Edge Client');
+  // a status with a long state text: shrinks to fit, then … and a tap shows all of it
+  const light = dev(iid, 'traffic_light', 'Trafikljus entré');
+  fn(iid, light, 'boolean_text', 'Trafikljus', 'obj/light/1/state', {
+    state_red: '2', text_red: 'Stopp', state_yellow: '1', text_yellow: 'Rörelse vid dörren, kontrollera entrén innan larmet kopplas på igen', state_green: '0', text_green: 'Fritt',
+    'dashboard.color_red': '#dc2626', 'dashboard.color_yellow': '#eab308', 'dashboard.color_green': '#16a34a', 'dashboard.widget': 'status',
+  });
+  setStatus({ client_id: 5001, installation_id: iid, topic: 'obj/light/1/state', value: 1, msg: '', timestamp: now() - 3600 });
   fn(iid, edge, 'boolean_text', 'online', 'box/event/status', { state_true: '1', state_false: '0', text_true: 'up', text_false: 'down', 'dashboard.widget': 'status', 'dashboard.icon': 'bolt' });
   setStatus({ client_id: 5001, installation_id: iid, topic: 'box/event/status', value: 1, msg: '', timestamp: now() - 7 * 3600 });
   retained.set('5001/box/event/status', '1');

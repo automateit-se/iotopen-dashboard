@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { formatValue, formatAge, isOn, onOffValues } from '../../lib/format.js';
 import { fnName, writeTopic, onOffTopics, rangeOf, isBinary, isHidden, stateColor, safeUrl, controlTopic, isDiscrete, OBJ_META } from '../../lib/dashboard.js';
 import { Icon } from '../icons.jsx';
+import { FitText } from '../FitText.jsx';
 import { TimelineWidget } from './Timeline.jsx';
 import { MultiChartWidget } from './MultiChart.jsx';
 import { TrackerWidget } from './Tracker.jsx';
@@ -27,9 +28,15 @@ export function ValueWidget({ w, ctx, iid }) {
   const h = Number(w.layout.h) || 1;
   // Minigraf (layout "spark"): a small curve under the value, with MIN / MEDEL / MAX from height 2
   const spark = !!w.layout.spark && h >= 1 && !isDiscrete(w.obj);
+  const text = formatValue(w.obj, v?.value);
   return (
-    <div className={`w-value ${spark ? 'has-spark' : ''}`}>
-      <div className={`big ${stClass(w.obj, v?.value)}`}>{formatValue(w.obj, v?.value)}</div>
+    <div className={`w-value ${spark ? 'has-spark' : 'fits'}`}>
+      {spark ? (
+        <div className={`big ${stClass(w.obj, v?.value)}`}>{text}</div>
+      ) : (
+        // a long state text shrinks to fit the widget, then gets … and can be tapped to read it all
+        <FitText text={text} className={`big ${stClass(w.obj, v?.value)}`} max={h < 1 ? 20 : 28} single={h < 1} heading={w.name} detail={formatAge(v?.timestamp)} />
+      )}
       {spark && <Sparkline fn={w.obj} ctx={ctx} iid={iid} hours={Number(w.layout.hours) || 24} stats={w.layout.stats !== false && h >= 2} axes={h >= 2} />}
       <div className="muted small">{formatAge(v?.timestamp)}</div>
     </div>
@@ -38,6 +45,7 @@ export function ValueWidget({ w, ctx, iid }) {
 
 // ---- status (on/off indicator) -------------------------------------------------------------
 export function StatusWidget({ w, ctx }) {
+  const h = Number(w.layout.h) || 1;
   const v = ctx.valueOf(w.obj);
   const has = v && v.value !== undefined && v.value !== null;
   const on = has && isOn(w.obj, v.value);
@@ -46,8 +54,8 @@ export function StatusWidget({ w, ctx }) {
   return (
     <div className="w-status">
       <span className={`dot ${has ? (on ? 'on' : 'off') : 'none'}`} style={color ? { background: color, boxShadow: `0 0 0 4px color-mix(in srgb, ${color} 22%, transparent)` } : undefined} />
-      <div>
-        <div className="big">{has ? formatValue(w.obj, v.value) : '–'}</div>
+      <div className="w-status-text">
+        <FitText text={has ? formatValue(w.obj, v.value) : '–'} className="big" max={h < 1 ? 20 : 28} single={h < 1} heading={w.name} detail={v?.msg || formatAge(v?.timestamp)} />
         <div className="muted small">{v?.msg || formatAge(v?.timestamp)}</div>
       </div>
     </div>
