@@ -32,3 +32,33 @@ test('paths span the width and stay inside the box', () => {
   assert.match(sparkPaths(pts([0, 5], [100, 5]), 0, 100).line, /,15\.00 L100\.00,15\.00$/);
   assert.equal(sparkPaths(pts([0, 5]), 0, 100), null);
 });
+
+import { niceAxis, timeTicks } from '../src/lib/sparkline.js';
+
+test('y axis: three round values that hold the data', () => {
+  assert.deepEqual(niceAxis([5, 18.4, 22]).ticks, [5, 15, 25]);
+  assert.deepEqual(niceAxis([17.9, 23]).ticks, [15, 20, 25]);
+  assert.deepEqual(niceAxis([18.1, 20.3]).ticks, [18, 20, 22]);
+  assert.deepEqual(niceAxis([0.2, 0.9]).ticks, [0, 0.5, 1]);
+  assert.deepEqual(niceAxis([5, 5]).ticks, [4, 5, 6]);
+  for (const v of [[5, 22], [804, 1514], [-3.2, 7.9], [0.01, 0.04]]) {
+    const a = niceAxis(v);
+    assert.ok(a.lo <= Math.min(...v) && a.hi >= Math.max(...v), JSON.stringify(v));
+    assert.equal(+(a.ticks[1] - a.ticks[0]).toFixed(9), +(a.ticks[2] - a.ticks[1]).toFixed(9));
+  }
+  assert.equal(niceAxis([]), null);
+});
+
+test('x axis: round local times, at most four, not at the edges', () => {
+  const d = new Date(2026, 9, 28, 22, 37);
+  const to = d.getTime() / 1000;
+  const day = timeTicks(to - 86400, to);
+  assert.ok(day.length >= 2 && day.length <= 4);
+  for (const t of day) assert.equal(new Date(t.ts * 1000).getMinutes(), 0);
+  assert.ok(day.every((t) => /^\d\d:\d\d$/.test(t.label)));
+  const hour = timeTicks(to - 3600, to);
+  assert.ok(hour.length >= 2 && hour.every((t) => new Date(t.ts * 1000).getMinutes() % 15 === 0));
+  const week = timeTicks(to - 7 * 86400, to);
+  assert.ok(week.length >= 2 && week.length <= 4 && week.every((t) => new Date(t.ts * 1000).getHours() === 0));
+  assert.equal(timeTicks(to, to).length, 0);
+});
