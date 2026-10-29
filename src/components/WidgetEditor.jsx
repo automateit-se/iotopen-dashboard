@@ -81,6 +81,9 @@ function MoreFunctions({ obj, raw, more, setMore, series, setSeries, q, setQ }) 
   );
 }
 
+// state texts longer than this may have to shrink or be cut on small widgets (the editor says so)
+const LONG_STATE_TEXT = 40;
+
 /**
  * Edits one widget (or creates one from a candidate when `isNew`).
  * Simple settings go to the object's metadata, size and technical parameters to the layout file.
@@ -410,6 +413,11 @@ export function WidgetEditor({ kind, obj, raw, widgetType, layoutEntry, isNew, e
             <button type="button" className="btn small-btn" onClick={() => setStates((rows) => [...rows, { key: '', value: '', text: '', color: '' }])}>
               <Icon name="plus" size={14} /> Lägg till tillstånd
             </button>
+            {states.some((r) => String(r.text || '').trim().length > LONG_STATE_TEXT) && (
+              <div className="warn-box">
+                En text är längre än {LONG_STATE_TEXT} tecken. På små widgetar krymps den, och får den ändå inte plats kapas den med … (tryck på widgeten för att läsa allt). Korta texter läses bäst på avstånd, t.ex. på en TV.
+              </div>
+            )}
           </div>
         </Field>
       )}
