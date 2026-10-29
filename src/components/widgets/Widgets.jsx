@@ -30,7 +30,7 @@ export function ValueWidget({ w, ctx, iid }) {
   return (
     <div className={`w-value ${spark ? 'has-spark' : ''}`}>
       <div className={`big ${stClass(w.obj, v?.value)}`}>{formatValue(w.obj, v?.value)}</div>
-      {spark && <Sparkline fn={w.obj} ctx={ctx} iid={iid} hours={Number(w.layout.hours) || 24} stats={w.layout.stats !== false && h >= 2} />}
+      {spark && <Sparkline fn={w.obj} ctx={ctx} iid={iid} hours={Number(w.layout.hours) || 24} stats={w.layout.stats !== false && h >= 2} axes={h >= 2} />}
       <div className="muted small">{formatAge(v?.timestamp)}</div>
     </div>
   );

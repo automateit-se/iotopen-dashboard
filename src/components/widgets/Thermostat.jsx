@@ -3,6 +3,8 @@ import { lynx, normTopic } from '../../api/lynx.js';
 import { formatAge, formatValue } from '../../lib/format.js';
 import { fnName, rangeOf, safeColor, writeTopic } from '../../lib/dashboard.js';
 import { loadHistory } from '../../lib/history.js';
+import { niceAxis } from '../../lib/sparkline.js';
+import { MiniChart, axisLabel, periodText } from './Sparkline.jsx';
 import { actionText, textValue, dialValueAt, modeText, setpointSegments, stepSetpoint, thermostatFunctions, thermostatModes, zoneFor, zonesOf } from '../../lib/thermostat.js';
 import { Icon } from '../icons.jsx';
 
@@ -154,11 +156,9 @@ function ThermoGraph({ t, ctx, iid, hours, tempColor, zones, current, target, re
     const inForce = sp.filter((x) => x.ts < from).pop();
     const vals = [...temp.map((x) => x.value), ...(inForce ? [inForce.value] : []), ...sp.filter((x) => x.ts >= from).map((x) => x.value)].filter(Number.isFinite);
     if (!vals.length) return null;
-    let lo = Math.min(...vals);
-    let hi = Math.max(...vals);
-    const pad = Math.max(0.5, (hi - lo) * 0.1);
-    lo -= pad;
-    hi += pad;
+    // a y axis of three round values (e.g. 5 · 15 · 25) that holds both lines
+    const axis = niceAxis(vals);
+    const { lo, hi } = axis;
     // the temperature uses the same y range as the set point, so the two lines can be compared
     const X = (ts) => (((ts - from) / (now - from)) * 100).toFixed(2);
     const Y = (v) => (40 - ((v - lo) / (hi - lo)) * 40).toFixed(2);
@@ -168,13 +168,16 @@ function ThermoGraph({ t, ctx, iid, hours, tempColor, zones, current, target, re
       const line = pts.map((x, i) => `${i ? 'L' : 'M'}${X(x.ts)},${Y(x.value)}`).join(' ');
       tp = { line, area: `${line} L${X(pts[pts.length - 1].ts)},40 L${X(pts[0].ts)},40 Z` };
     }
-    return { tp, segs: setpointSegments(sp, from, now, lo, hi, zones, 100, 40), lo, hi };
+    return { tp, segs: setpointSegments(sp, from, now, lo, hi, zones, 100, 40), axis };
   }, [data, from, now, current, target, zones, reported?.value, reported?.ts]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (err) return <div className="thermo-graph muted small">{err}</div>;
   return (
     <div className="thermo-graph">
-      <svg viewBox="0 0 100 40" preserveAspectRatio="none" aria-hidden="true">
+      {!view ? (
+        <div className="mini" />
+      ) : (
+      <MiniChart axis={view.axis} from={from} to={now} fmtY={(v) => axisLabel(t.current || t.target, v)}>
         {view?.tp && (
           <>
             <path d={view.tp.area} fill={tempColor} opacity="0.1" />
@@ -184,7 +187,8 @@ function ThermoGraph({ t, ctx, iid, hours, tempColor, zones, current, target, re
         {view?.segs.map((s, i) => (
           <path key={i} d={s.d} fill="none" stroke={s.color} className="thermo-graph-sp" vectorEffect="non-scaling-stroke" />
         ))}
-      </svg>
+      </MiniChart>
+      )}
       <div className="thermo-graph-legend small muted">
         {t.current && (
           <span>
@@ -203,11 +207,7 @@ function ThermoGraph({ t, ctx, iid, hours, tempColor, zones, current, target, re
           </span>
         )}
         <span className="grow" />
-        {view && (
-          <span className="thermo-graph-range">
-            {formatValue(t.current || t.target, Number(view.lo.toFixed(1)))} – {formatValue(t.current || t.target, Number(view.hi.toFixed(1)))}
-          </span>
-        )}
+        <span>{periodText(hours)}</span>
       </div>
     </div>
   );
