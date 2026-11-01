@@ -271,7 +271,7 @@ export function ThermostatWidget({ w, ctx, iid }) {
     clearTimeout(timer.current);
     timer.current = setTimeout(() => {
       if (!ctx.publish(tgtWrite, next)) {
-        setErr('Ingen MQTT-anslutning');
+        setErr(ctx.notSent());
         setDraft(null);
         return;
       }
@@ -284,7 +284,7 @@ export function ThermostatWidget({ w, ctx, iid }) {
     clearTimeout(timer.current);
     if (!tgtWrite) return setErr('Börvärdet saknar topic_write');
     if (!ctx.publish(tgtWrite, v)) {
-      setErr('Ingen MQTT-anslutning');
+      setErr(ctx.notSent());
       setDraft(null);
       return;
     }
@@ -293,7 +293,7 @@ export function ThermostatWidget({ w, ctx, iid }) {
   };
   const setMode = (m) => {
     if (!modeWrite) return setErr('Läget saknar topic_write');
-    if (!ctx.publish(modeWrite, m)) return setErr('Ingen MQTT-anslutning');
+    if (!ctx.publish(modeWrite, m)) return setErr(ctx.notSent());
     setErr('');
     setPendingMode(m);
   };

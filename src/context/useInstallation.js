@@ -5,6 +5,7 @@ import { config } from '../api/config.js';
 import { buildWidgets, readLayout, readLogo } from '../lib/dashboard.js';
 import { createMqttStore, mqttFilters } from '../lib/mqttWidget.js';
 import { refreshLocalStatus, setLocalBridge } from '../components/LocalBar.jsx';
+import { BRIDGE_STATUS, EDGE_NOT_SENT, edgeStale, nextEdge } from '../lib/edge.js';
 
 const POLL_MS = 30000; // REST polling only while MQTT is not live
 const STRUCTURE_DEBOUNCE_MS = 1000; // bulk edits emit many evt/*/updated – reload once
@@ -14,8 +15,6 @@ const STRUCTURE_EVENTS = ['evt/functionx/updated', 'evt/devicex/updated'];
 const INSTALLATION_EVENT = 'evt/installation/updated';
 const FILE_EVENT = 'evt/file/updated';
 const EVENTS = [...STRUCTURE_EVENTS, INSTALLATION_EVENT, FILE_EVENT];
-// local mode: the edge app passes on its edge client's connection to IoT Open (the MQTT bridge's status)
-const BRIDGE_STATUS = 'box/event/status';
 
 /**
  * Everything for one installation:
@@ -24,6 +23,7 @@ const BRIDGE_STATUS = 'box/event/status';
  *   + changes over MQTT ("<client_id>/evt/{devicex,functionx,installation,file}/updated") -> re-read only
  *     what changed. Nothing is polled while MQTT is live.
  *   + the topics of MQTT widgets ("<client_id>/<topic filter>" from the layout file), kept as raw messages.
+ *   + the edge client's connection to IoT Open ("<client_id>/box/event/status", see lib/edge.js).
  */
 export function useInstallation(iid) {
   const [inst, setInst] = useState(null);
@@ -34,6 +34,8 @@ export function useInstallation(iid) {
   const [liveState, setLiveState] = useState('off');
   const [tick, setTick] = useState(0); // bumps when values change (throttled)
   const [logo, setLogo] = useState(null); // object URL of dashboard-logo.png, null = IoT Open default
+  const [edge, setEdge] = useState(null); // { up, since } of the edge client, null until its bridge has said
+  const edgeRef = useRef(null);
 
   const byTopic = useRef(new Map());
   const listeners = useRef(new Set());
@@ -62,8 +64,8 @@ export function useInstallation(iid) {
       .filter(Boolean)
       .map((t) => `${i.client_id}/${normTopic(t)}`);
     const widgetTopics = filtersRef.current.map((t) => `${i.client_id}/${t}`);
-    const local = config.local ? [`${i.client_id}/${BRIDGE_STATUS}`] : [];
-    mqttRef.current.setSubscriptions([...topics, ...widgetTopics, ...EVENTS.map((e) => `${i.client_id}/${e}`), ...local]);
+    const bridge = `${i.client_id}/${BRIDGE_STATUS}`;
+    mqttRef.current.setSubscriptions([...topics, ...widgetTopics, ...EVENTS.map((e) => `${i.client_id}/${e}`), bridge]);
   }, []);
 
   /** Reads structure + values (+ layout unless skipped). Newer live values are kept. */
@@ -159,7 +161,15 @@ export function useInstallation(iid) {
     (fullTopic, payload, { retained = false, text = '' } = {}) => {
       const m = /^(\d+)\/(.*)$/.exec(fullTopic);
       if (!m || String(instRef.current?.client_id) !== m[1]) return;
-      if (m[2] === BRIDGE_STATUS) return config.local && setLocalBridge(String(payload?.value).trim() === '1');
+      if (m[2] === BRIDGE_STATUS) {
+        const next = nextEdge(edgeRef.current, payload);
+        if (next !== edgeRef.current) {
+          edgeRef.current = next;
+          setEdge(next);
+          if (config.local) setLocalBridge(next.up);
+        }
+        // and on, as a value: a function may show the edge client's status
+      }
       // MQTT widgets: the raw message, for every topic (a widget may show a function's topic too)
       if (!m[2].startsWith('evt/')) mqttStore.current.add(m[2], text, { retained, filters: filtersRef.current });
       if (STRUCTURE_EVENTS.includes(m[2])) return debounce('structure', () => load({ withLayout: false, quiet: true }));
@@ -186,8 +196,10 @@ export function useInstallation(iid) {
     mqttStore.current.clear();
     instRef.current = null;
     rawRef.current = null;
+    edgeRef.current = null;
     setInst(null);
     setRaw(null);
+    setEdge(null);
     load();
   }, [load]);
 
@@ -234,12 +246,32 @@ export function useInstallation(iid) {
     return () => listeners.current.delete(fn);
   }, []);
 
-  /** Publishes a value (and optional msg) to "<client_id>/<topic_write>". Returns false when MQTT is not connected. */
+  /**
+   * true when a command to the topic would only reach an offline edge client: in the cloud, while the bridge is
+   * down, unless a function written on that topic has had a value since (it then has another source). Locally the
+   * dashboard talks to the edge client's own broker, so commands still work.
+   */
+  const edgeBlocks = useCallback((topicWrite) => {
+    const e = edgeRef.current;
+    if (config.local || !e || e.up !== false) return false;
+    const t = normTopic(topicWrite);
+    const fns = (rawRef.current?.functions || []).filter((f) => Object.entries(f.meta || {}).some(([k, v]) => k.startsWith('topic_write') && v && normTopic(v) === t));
+    const reads = fns.flatMap((f) => [f.meta?.topic_read, f.meta?.topic_read_onoff]).filter(Boolean);
+    return !reads.some((r) => !edgeStale(e, byTopic.current.get(normTopic(r))));
+  }, []);
+
+  /**
+   * Publishes a value (and optional msg) to "<client_id>/<topic_write>". Returns false when it was not sent: MQTT
+   * is not connected, or the edge client that would carry it is offline (notSent says which).
+   */
   const publish = useCallback((topicWrite, value, msg = '') => {
     const i = instRef.current;
-    if (!i || !mqttRef.current) return false;
+    if (!i || !mqttRef.current || edgeBlocks(topicWrite)) return false;
     return mqttRef.current.publish(`${i.client_id}/${normTopic(topicWrite)}`, { value: Number.isFinite(Number(value)) ? Number(value) : value, timestamp: Math.floor(Date.now() / 1000), ...(msg ? { msg } : {}) });
-  }, []);
+  }, [edgeBlocks]);
+
+  /** Why the last publish was refused, for the widget's error line. */
+  const notSent = useCallback(() => (edgeRef.current?.up === false && !config.local ? EDGE_NOT_SENT : 'Ingen MQTT-anslutning'), []);
 
   const valueOfTopic = useCallback((topic) => (topic ? byTopic.current.get(normTopic(topic)) || null : null), []);
   const valueOf = useCallback((fn) => valueOfTopic(fn?.meta?.topic_read), [valueOfTopic]);
@@ -256,5 +288,5 @@ export function useInstallation(iid) {
 
   const widgets = useMemo(() => (raw ? buildWidgets(raw, layout) : []), [raw, layout]);
 
-  return { inst, raw, layout, setLayout, widgets, logo, reloadLogo, error, loading, liveState, tick, valueOf, valueOfTopic, onLive, publish, mqtt, reload: load };
+  return { inst, raw, layout, setLayout, widgets, logo, reloadLogo, error, loading, liveState, tick, valueOf, valueOfTopic, onLive, publish, notSent, edge, mqtt, reload: load };
 }

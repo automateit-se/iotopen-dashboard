@@ -480,6 +480,7 @@ const server = http.createServer(async (req, res) => {
   }
   try {
     if (url.pathname.startsWith('/api/')) return await api(req, res, url);
+    if (url.pathname === '/mock/edge') return send(res, 200, setEdge(url.searchParams.get('up') !== '0'));
     send(res, 404, { message: 'Not found' });
   } catch (e) {
     console.error(e);
@@ -571,7 +572,22 @@ function mqttBroadcast(e) {
 function mqttPublish(full, obj) {
   mqttPublishText(full, JSON.stringify(obj));
 }
+// Kontoret's edge client can be taken offline to see what the dashboard does then:
+//   curl -X POST 'http://localhost:8787/mock/edge?up=0'   (and ?up=1 to bring it back)
+// Its bridge then publishes a retained "0" on box/event/status, and nothing else passes it in either direction.
+let edgeDown = false;
+const EDGE_STATUS = '5001/box/event/status';
+const behindEdge = (full) => edgeDown && full.startsWith('5001/obj/');
+function setEdge(up) {
+  edgeDown = !up;
+  const e = { client_id: 5001, installation_id: 1001, topic: 'box/event/status', value: up ? 1 : 0, msg: '', timestamp: now() };
+  setStatus(e);
+  retained.set(EDGE_STATUS, up ? '1' : '0');
+  mqttPublishText(EDGE_STATUS, up ? '1' : '0');
+  return { edge: up ? 'online' : 'offline' };
+}
 function mqttPublishText(full, text) {
+  if (behindEdge(full)) return;
   const t = mstr(full);
   const p = [...Buffer.from(text)];
   const pkt = [0x30, ...mlen(t.length + p.length), ...t, ...p];
@@ -620,6 +636,7 @@ function handleMqtt(c, type, body) {
     if (!inst) return;
     let pl = {}; try { pl = JSON.parse(body.subarray(2 + tl).toString()); } catch { /* ignore */ }
     console.log(`[mqtt publish] ${full} ${JSON.stringify(pl)}`);
+    if (edgeDown && full.startsWith('5001/set/')) return console.log('  (edge client offline: lost)');
     const f = functions.find((x) => x.installation_id === inst.id && (x.meta.topic_write === mm[2] || x.meta.topic_write_onoff === mm[2]));
     if (!f) return;
     if (mediaWrite(inst, f, pl)) return;

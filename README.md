@@ -11,6 +11,7 @@ The app has **no backend and no database of its own**:
   - With *Remember me* (*Kom ihåg mig*) the token is kept in the browser's `localStorage`, otherwise in `sessionStorage` for the tab only.
 - **Server**: the sign-in page shows which IoT Open server is used (*Server: lynx.iotopen.se*). The default is the container's `LYNX_URL`. With *Change* (*Ändra*) the user can type another server, e.g. `lynx.example.com`. After a successful sign-in that address is saved in this browser (`localStorage`) and used until the user changes it or chooses *Default* (*Standard*). Only `https://` addresses without a path are accepted (plain `http://` only for `localhost`). The default server is reached through the container's proxy; another server is called directly from the browser, which works because IoT Open allows CORS. `CUSTOM_SERVERS=false` turns the choice off.
 - **Live values** arrive over MQTT on a WebSocket (`/mqtt`) with the same token. Without MQTT everything is re-read over REST every 30 s. The header shows *Live* (green) or *Polling*.
+- **Edge client offline**: the dashboard also follows the edge client's connection to IoT Open, which its MQTT bridge publishes on `<client_id>/box/event/status` (retained `1` / `0`). When it is `0`, the *Live* badge turns into a yellow *Edge client offline*, and widgets whose values have not been updated since are greyed out with an *Offline* badge: values that come through the edge client stop while it is away. A value that arrives after the outage came from another source (for example an integration that publishes to IoT Open directly), so its widget stays as it is. Commands to functions behind the edge client are not sent; the widget says *Edge clienten är offline - kommandot skickades inte* instead, so nothing switches unexpectedly much later. Everything goes back to normal when the bridge publishes `1`.
 - **Changes in IoT Open** (devices, functions, installation metadata, files) arrive as `<client_id>/evt/<type>/updated` events, so nothing is polled while MQTT is connected.
 - **Control**: switches, set points and dimmers publish to `<client_id>/<topic_write>` (topics starting with `set/obj/…`).
 - **Container**: nginx (non-root, port 8080). It serves the app and, by default (`API_MODE=proxy`), proxies `/api/*` and `/mqtt` to one fixed IoT Open address (`LYNX_URL`), so with the default server the browser only talks to its own origin. With `API_MODE=direct` the browser talks to `LYNX_URL` itself and the container only serves the app, see [Proxy or direct](#proxy-or-direct).
@@ -46,7 +47,7 @@ npm run dev               # Vite on :5173, proxies /api and /mqtt to the mock
 LYNX_URL=https://lynx.iotopen.se npm run dev   # against a real instance (PowerShell: $env:LYNX_URL="https://lynx.iotopen.se"; npm run dev)
 ```
 
-The mock (`mock/server.mjs`, no dependencies) implements the parts of the IoT Open API the dashboard uses, including MQTT (with `+`/`#` wildcards and a few topics without functions for the MQTT widget), `evt/*` events, aggregation and the rejection of empty metadata values. Test logins: `demo@example.com` / `demo`, API key `demo-api-key`, and `twofa@example.com` / `demo` with code `123456`.
+The mock (`mock/server.mjs`, no dependencies) implements the parts of the IoT Open API the dashboard uses, including MQTT (with `+`/`#` wildcards and a few topics without functions for the MQTT widget), `evt/*` events, aggregation and the rejection of empty metadata values. Test logins: `demo@example.com` / `demo`, API key `demo-api-key`, and `twofa@example.com` / `demo` with code `123456`. `curl -X POST 'http://localhost:8787/mock/edge?up=0'` takes the demo installation's edge client offline (`?up=1` brings it back).
 
 > If the project folder is in a synced folder (Nextcloud, OneDrive …), run `npm install` in a copy outside it so `node_modules` is not synced.
 
@@ -365,6 +366,7 @@ src/lib/history.js              log reading with server-side aggregation
 src/lib/periods.js              periods in local time and consumption per period (consumption and summary widgets)
 src/lib/background.js           background image per page: settings, scaling and compression
 src/lib/local.js                local mode (edge app): pages, start page, excluded widget types, sign-in
+src/lib/edge.js                 the edge client's connection to IoT Open (box/event/status): stale values, commands
 scripts/build-local.mjs         the dashboard as one HTML file for the edge app
 src/context/AppContext.jsx      session and installations
 src/context/useInstallation.js  REST snapshot + MQTT live values + evt events for one installation

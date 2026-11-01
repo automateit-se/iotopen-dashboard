@@ -77,7 +77,7 @@ export function Toggle({ fn, ctx, compact = false }) {
   const click = () => {
     if (!write) return setErr('Funktionen saknar topic_write');
     const next = !shown;
-    if (!ctx.publish(write, next ? onVal : offVal, msgOf(next))) return setErr('Ingen MQTT-anslutning');
+    if (!ctx.publish(write, next ? onVal : offVal, msgOf(next))) return setErr(ctx.notSent());
     setErr('');
     setPending(next);
     setTimeout(() => setPending(null), 8000); // fall back to the reported state if nothing comes back
@@ -115,7 +115,7 @@ export function NumberSet({ fn, ctx, compact = false }) {
   const range = rangeOf(fn);
   const publish = (n) => {
     if (!write) return setErr('Funktionen saknar topic_write');
-    if (!ctx.publish(write, n)) return setErr('Ingen MQTT-anslutning');
+    if (!ctx.publish(write, n)) return setErr(ctx.notSent());
     setErr('');
     return true;
   };
@@ -192,7 +192,7 @@ export function ButtonWidget({ w, ctx }) {
   const start = () => {
     if (held.current) return;
     if (!write) return setErr('Funktionen saknar topic_write');
-    if (!ctx.publish(write, press, pressMsg)) return setErr('Ingen MQTT-anslutning');
+    if (!ctx.publish(write, press, pressMsg)) return setErr(ctx.notSent());
     held.current = true;
     setErr('');
     setDown(true);
@@ -201,7 +201,7 @@ export function ButtonWidget({ w, ctx }) {
     if (!held.current) return;
     held.current = false;
     setDown(false);
-    if (release !== '' && !ctx.publish(write, release, releaseMsg)) setErr('Ingen MQTT-anslutning');
+    if (release !== '' && !ctx.publish(write, release, releaseMsg)) setErr(ctx.notSent());
   };
   const key = (e) => (e.key === ' ' || e.key === 'Enter') && (e.preventDefault(), e.type === 'keydown' ? !e.repeat && start() : end());
 
