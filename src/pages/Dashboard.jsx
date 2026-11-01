@@ -18,6 +18,7 @@ import { config } from '../api/config.js';
 import { localPages, startPage, excludedTypes } from '../lib/local.js';
 import { useLocalStatus } from '../components/LocalBar.jsx';
 import { worstStatus, staleOf, staleDevice } from '../lib/status.js';
+import { EDGE_OFFLINE_TEXT, isBridgeStatus, sinceText, widgetEdgeStale } from '../lib/edge.js';
 import { currentModeText } from '../lib/thermostat.js';
 import { errText } from '../components/Modal.jsx';
 import { Icon } from '../components/icons.jsx';
@@ -40,7 +41,7 @@ function useColumns() {
 export default function Dashboard({ iid, pageId = '' }) {
   const { user, setBrandLogo } = useApp();
   const ctx = useInstallation(iid);
-  const { inst, raw, layout, setLayout, widgets, logo, reloadLogo, error, loading, liveState, reload } = ctx;
+  const { inst, raw, layout, setLayout, widgets, logo, reloadLogo, error, loading, liveState, reload, edge } = ctx;
   const cols = useColumns();
   const [editing, setEditing] = useState(false);
   const [editor, setEditor] = useState(null); // { kind, obj, isNew }
@@ -59,6 +60,8 @@ export default function Dashboard({ iid, pageId = '' }) {
   // locally, "Live" only says the browser reaches the edge app; without IoT Open it is "Lokalt" in yellow
   const localStatus = useLocalStatus();
   const cutOff = !!local && liveState === 'live' && localStatus?.cloud === false;
+  // in the cloud, the edge client's bridge to IoT Open is down: values from it stop, commands to it are not sent
+  const edgeDown = !local && liveState === 'live' && edge?.up === false;
   const admin = !local && inst && user ? isAdmin(user, inst) : false;
   // pages: the one in the address, else the first (locally the start page); each widget is on one page
   const allPages = pagesOf(layout);
@@ -376,14 +379,16 @@ export default function Dashboard({ iid, pageId = '' }) {
         </div>
         <div className="row gap wrap">
           <span
-            className={`live ${cutOff ? 'local-only' : liveState === 'live' ? 'on' : ''}`}
+            className={`live ${cutOff || edgeDown ? 'local-only' : liveState === 'live' ? 'on' : ''}`}
             title={
               cutOff
                 ? 'Lokalt: edge clienten når inte IoT Open. Värden och styrning från enheterna på installationen fungerar, historiken är den som appen har sparat.'
-                : 'Live = värden kommer via MQTT. Polling = REST var 30:e sekund.'
+                : edgeDown
+                  ? `Edge clienten på installationen har ingen anslutning till IoT Open (sedan ${sinceText(edge)}). Värden som kommer via den är markerade som gamla, och kommandon till den skickas inte. Lokalt på installationen fungerar den som vanligt.`
+                  : 'Live = värden kommer via MQTT. Polling = REST var 30:e sekund.'
             }
           >
-            <span className="dot" /> {cutOff ? 'Lokalt' : LIVE_LABEL[liveState] || liveState}
+            <span className="dot" /> {cutOff ? 'Lokalt' : edgeDown ? EDGE_OFFLINE_TEXT : LIVE_LABEL[liveState] || liveState}
           </span>
           {admin && !editing && (
             <button type="button" className="btn" onClick={() => setEditing(true)}>
@@ -448,7 +453,12 @@ export default function Dashboard({ iid, pageId = '' }) {
           {shown.map((w) => {
             const C = WIDGET_COMPONENTS[w.type];
             // silent (metric_monitor.status > 0): greyed out; its stale value does not drive Warning/Critical
-            const stale = w.kind === 'function' ? staleOf(w.obj, raw) : w.kind === 'device' ? staleDevice(w.obj) : null;
+            const silent = w.kind === 'function' ? staleOf(w.obj, raw) : w.kind === 'device' ? staleDevice(w.obj) : null;
+            // edge client offline: nothing of the widget has been updated since, so its values may be old
+            const offline = !silent && edgeDown && widgetEdgeStale(edge, widgetFunctions(w, raw).filter((f) => !isBridgeStatus(f)).map((f) => ctx.valueOf(f)))
+              ? { text: `Edge clienten är offline sedan ${sinceText(edge)} - värdet kan vara gammalt`, offline: true }
+              : null;
+            const stale = silent || offline;
             const st = stale ? null : worstStatus(widgetFunctions(w, raw).filter((f) => !staleOf(f, raw)).map((f) => [f, ctx.valueOf(f)?.value]));
             // value widget: dashboard.color_<state> fills the tile (e.g. a banner "Larmat" in red); a Warning/Critical status wins
             const fill = w.type === 'value' && !stale && !(st && st.level > 0) ? stateColor(w.obj, ctx.valueOf(w.obj)?.value) : w.type === 'mqtt' && (w.layout.mode || 'value') === 'value' ? mqttShown(w, ctx)?.color || '' : '';
@@ -482,8 +492,8 @@ export default function Dashboard({ iid, pageId = '' }) {
                     return mode ? <span className="tile-head-text">{mode}</span> : null;
                   })()}
                   {stale && (
-                    <span className="stale-badge" title={`metric_monitor: ${stale.text}`}>
-                      Tyst
+                    <span className="stale-badge" title={stale.offline ? stale.text : `metric_monitor: ${stale.text}`}>
+                      {stale.offline ? 'Offline' : 'Tyst'}
                     </span>
                   )}
                   {st && (

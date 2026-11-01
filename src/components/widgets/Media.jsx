@@ -20,7 +20,7 @@ function useSwitch(fn, ctx) {
   const set = (next) => {
     if (!write) return 'Funktionen saknar topic_write';
     const { on: onVal, off: offVal } = onOffValues(fn);
-    if (!ctx.publish(write, next ? onVal : offVal)) return 'Ingen MQTT-anslutning';
+    if (!ctx.publish(write, next ? onVal : offVal)) return ctx.notSent();
     setPending(next);
     return '';
   };
@@ -75,7 +75,7 @@ export function MediaWidget({ w, ctx }) {
   const sendVol = () => {
     if (slide === null) return;
     if (!volWrite) return act('Volym saknar topic_write');
-    act(ctx.publish(volWrite, slide) ? '' : 'Ingen MQTT-anslutning');
+    act(ctx.publish(volWrite, slide) ? '' : ctx.notSent());
   };
   const [artist, title] = track.includes(' – ') ? [track.slice(0, track.indexOf(' – ')), track.slice(track.indexOf(' – ') + 3)] : ['', track];
 
