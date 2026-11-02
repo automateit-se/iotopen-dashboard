@@ -176,6 +176,8 @@ export function NumberWidget({ w, ctx }) {
 /**
  * Sends dashboard.press (default 1) to topic_write when pressed and dashboard.release, if set, when released.
  * Works with mouse, touch and keyboard (space/enter); leaving the button while held counts as a release.
+ * Time relays: dashboard.press_delay (on delay, hold that long before the press goes; let go earlier and nothing is
+ * sent) and dashboard.release_delay (off delay, the release goes that long after the button is let go).
  */
 export function ButtonWidget({ w, ctx }) {
   const fn = w.obj;
@@ -184,64 +186,117 @@ export function ButtonWidget({ w, ctx }) {
   const release = String(fn.meta?.[OBJ_META.release] ?? '').trim();
   const pressMsg = String(fn.meta?.[OBJ_META.press_msg] ?? '').trim();
   const releaseMsg = String(fn.meta?.[OBJ_META.release_msg] ?? '').trim();
-  // a release delay (seconds): the release value goes that long after the press, not when the button is let go.
-  // The timer runs in this browser: it must stay open until then (leaving the page sends the release at once).
-  const delay = release !== '' ? Number(String(fn.meta?.[OBJ_META.release_delay] ?? '').replace(',', '.')) || 0 : 0;
-  const [down, setDown] = useState(false);
+  const seconds = (key) => Math.max(0, Number(String(fn.meta?.[key] ?? '').replace(',', '.')) || 0);
+  // time relays (seconds): the button must be held this long before the press value goes (on delay), and the
+  // release value goes this long after the button is let go (off delay). Both run in this browser.
+  const onDelay = seconds(OBJ_META.press_delay);
+  const offDelay = release !== '' ? seconds(OBJ_META.release_delay) : 0;
+  // idle -> (arming: held, waiting for the on delay) -> on: pressed, value sent -> (releasing: off delay) -> idle
+  const [phase, setPhase] = useState('idle');
+  const [left, setLeft] = useState(0); // seconds left of the running delay
   const [err, setErr] = useState('');
-  const [left, setLeft] = useState(0); // seconds until the delayed release, 0 = none pending
-  const held = useRef(false);
-  const timer = useRef(null);
-  const sendRelease = useRef(() => {});
+  const state = useRef({ phase: 'idle', held: false, timer: null });
   const v = ctx.valueOf(fn);
 
-  sendRelease.current = () => {
-    clearInterval(timer.current?.tick);
-    clearTimeout(timer.current?.done);
-    timer.current = null;
-    setLeft(0);
-    if (release !== '' && !ctx.publish(write, release, releaseMsg)) setErr(ctx.notSent());
+  const go = (p) => {
+    state.current.phase = p;
+    setPhase(p);
   };
-  // leaving the page (or editing the widget) while a delay runs: the release is sent now, never forgotten
-  useEffect(() => () => timer.current && sendRelease.current(), []);
-
-  const startDelay = () => {
-    clearInterval(timer.current?.tick);
-    clearTimeout(timer.current?.done);
-    const until = Date.now() + delay * 1000;
-    setLeft(Math.ceil(delay));
-    timer.current = {
-      done: setTimeout(() => sendRelease.current(), delay * 1000),
+  const stopTimer = () => {
+    const t = state.current.timer;
+    if (t) {
+      clearTimeout(t.done);
+      clearInterval(t.tick);
+    }
+    state.current.timer = null;
+    setLeft(0);
+  };
+  const runTimer = (secs, then) => {
+    stopTimer();
+    const until = Date.now() + secs * 1000;
+    setLeft(Math.ceil(secs));
+    state.current.timer = {
+      done: setTimeout(() => {
+        stopTimer();
+        then();
+      }, secs * 1000),
       tick: setInterval(() => setLeft(Math.max(0, Math.ceil((until - Date.now()) / 1000))), 250),
     };
   };
-  const start = () => {
-    if (held.current) return;
-    if (!write) return setErr('Funktionen saknar topic_write');
-    // pressed again while the delay runs: the press is sent again and the delay starts over
-    if (!ctx.publish(write, press, pressMsg)) return setErr(ctx.notSent());
-    held.current = true;
+  const sendPress = () => {
+    if (!ctx.publish(write, press, pressMsg)) {
+      setErr(ctx.notSent());
+      return go('idle');
+    }
     setErr('');
-    setDown(true);
-    if (delay > 0) startDelay();
+    go('on');
   };
-  const end = () => {
-    if (!held.current) return;
-    held.current = false;
-    setDown(false);
-    if (delay > 0) return; // the timer sends the release
+  const sendRelease = () => {
+    go('idle');
     if (release !== '' && !ctx.publish(write, release, releaseMsg)) setErr(ctx.notSent());
   };
+  const letGo = () => {
+    if (state.current.phase !== 'on') return;
+    if (offDelay > 0) {
+      go('releasing');
+      runTimer(offDelay, sendRelease);
+    } else sendRelease();
+  };
+  const sendReleaseRef = useRef(sendRelease);
+  sendReleaseRef.current = sendRelease;
+  // leaving the page (or editing the widget) with the press value sent: the release goes now, never forgotten
+  useEffect(
+    () => () => {
+      const p = state.current.phase;
+      stopTimer();
+      if (p === 'on' || p === 'releasing') sendReleaseRef.current();
+    },
+    [], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+
+  const start = () => {
+    if (state.current.held) return;
+    if (!write) return setErr('Funktionen saknar topic_write');
+    state.current.held = true;
+    const p = state.current.phase;
+    if (p === 'releasing') {
+      // pressed again during the off delay: the value is still on, the delay starts over when let go
+      stopTimer();
+      return go('on');
+    }
+    if (p !== 'idle') return;
+    if (onDelay > 0) {
+      go('arming');
+      runTimer(onDelay, sendPress);
+    } else sendPress();
+  };
+  const end = () => {
+    if (!state.current.held) return;
+    state.current.held = false;
+    if (state.current.phase === 'arming') {
+      // let go before the on delay: nothing is sent
+      stopTimer();
+      return go('idle');
+    }
+    letGo();
+  };
   const key = (e) => (e.key === ' ' || e.key === 'Enter') && (e.preventDefault(), e.type === 'keydown' ? !e.repeat && start() : end());
+  const describe = [
+    onDelay > 0 ? `håll in ${onDelay} s` : '',
+    `skickar ${press}`,
+    release !== '' ? (offDelay > 0 ? `${release} ${offDelay} s efter att den släppts` : `${release} när den släpps`) : '',
+  ]
+    .filter(Boolean)
+    .join(', ');
 
   return (
     <div className="w-button">
       <button
         type="button"
-        className={`push ${down ? 'down' : ''} ${left > 0 ? 'timing' : ''}`}
+        className={`push ${phase === 'on' || phase === 'arming' ? 'down' : ''} ${phase === 'arming' ? 'arming' : ''} ${phase === 'releasing' ? 'timing' : ''}`}
         disabled={!write}
-        title={write ? `Skickar ${press}${release !== '' ? (delay > 0 ? `, ${release} efter ${delay} s` : `, ${release} när den släpps`) : ''}` : 'Saknar topic_write'}
-        aria-pressed={down || left > 0}
+        title={write ? describe.charAt(0).toUpperCase() + describe.slice(1) : 'Saknar topic_write'}
+        aria-pressed={phase !== 'idle'}
         onPointerDown={(e) => {
           e.currentTarget.setPointerCapture?.(e.pointerId);
           start();
@@ -259,7 +314,11 @@ export function ButtonWidget({ w, ctx }) {
       </button>
       {err ? (
         <span className="err small">{err}</span>
-      ) : left > 0 ? (
+      ) : phase === 'arming' ? (
+        <span className="muted small" aria-live="polite">
+          Håll in {left} s
+        </span>
+      ) : phase === 'releasing' ? (
         <span className="muted small" aria-live="polite">
           Skickar {release} om {left} s
         </span>

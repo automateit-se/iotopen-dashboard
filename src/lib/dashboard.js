@@ -10,7 +10,7 @@
 //                       dashboard.icon       icon name, see components/icons.jsx
 //                       dashboard.color_<x>  colour for the state state_<x> (value/status widgets, e.g. a banner)
 //                       dashboard.press / dashboard.release  values a push button sends (release optional)
-//                       dashboard.release_delay  seconds after the press to send the release value (a timer)
+//                       dashboard.press_delay / release_delay  on and off delay of a push button, in seconds
 //                       dashboard.press_msg / release_msg / on_msg / off_msg  optional "msg" sent with the value
 //                       dashboard.topic      where switch/button publish: a topic_* key of the function or a topic
 //   Installation file   dashboard-layout.json  order, size and technical parameters per widget
@@ -69,7 +69,9 @@ export const OBJ_META = {
   // push button: value sent while pressed, and (optional) when released
   press: 'dashboard.press',
   release: 'dashboard.release',
-  // push button: send the release value this many seconds after the press, not when the button is let go
+  // push button time relays (seconds): hold this long before the press value is sent (on delay), and send the
+  // release value this long after the button is let go (off delay)
+  press_delay: 'dashboard.press_delay',
   release_delay: 'dashboard.release_delay',
   // advanced control: a message ("msg") sent with the value, and another topic to publish to
   press_msg: 'dashboard.press_msg',
@@ -430,6 +432,7 @@ export const EXTRA_FIELDS = {
   icon: 'icon',
   press: 'press',
   release: 'release',
+  press_delay: 'press_delay',
   release_delay: 'release_delay',
   press_msg: 'press_msg',
   release_msg: 'release_msg',
