@@ -149,13 +149,14 @@ export function WidgetEditor({ kind, obj, raw, widgetType, layoutEntry, isNew, e
   const setState = (i, patch) => setStates((rows) => rows.map((r, j) => (j === i ? { ...r, ...patch } : r)));
   const [press, setPress] = useState(m[OBJ_META.press] || '');
   const [release, setRelease] = useState(m[OBJ_META.release] || '');
+  const [releaseDelay, setReleaseDelay] = useState(m[OBJ_META.release_delay] || '');
   // advanced control (switch/button): msg with the value, and another topic; hidden until "Avancerat" is ticked
   const [msgA, setMsgA] = useState(m[OBJ_META.press_msg] || m[OBJ_META.on_msg] || '');
   const [msgB, setMsgB] = useState(m[OBJ_META.release_msg] || m[OBJ_META.off_msg] || '');
   const [topic, setTopic] = useState(m[OBJ_META.topic] || '');
   const keys = topicKeys(obj);
   const [customTopic, setCustomTopic] = useState(() => !!m[OBJ_META.topic] && !keys.includes(m[OBJ_META.topic]));
-  const [advanced, setAdvanced] = useState(() => !!(m[OBJ_META.press_msg] || m[OBJ_META.release_msg] || m[OBJ_META.on_msg] || m[OBJ_META.off_msg] || m[OBJ_META.topic]));
+  const [advanced, setAdvanced] = useState(() => !!(m[OBJ_META.press_msg] || m[OBJ_META.release_msg] || m[OBJ_META.on_msg] || m[OBJ_META.off_msg] || m[OBJ_META.topic] || m[OBJ_META.release_delay]));
   const initiallyVisible = !isHidden(obj);
   const [visible, setVisible] = useState(initiallyVisible);
   const [busy, setBusy] = useState(false);
@@ -233,9 +234,16 @@ export function WidgetEditor({ kind, obj, raw, widgetType, layoutEntry, isNew, e
       const on = advanced && kind === 'function';
       const t = on ? topic.trim() : '';
       if (t && !/^topic_/.test(t) && !/^[^\s#+]+$/.test(t)) throw new Error('Topic får inte innehålla mellanslag, # eller +.');
+      // release delay (seconds): a number from 0.5 to 3600, and only with a value to send when it has passed
+      const delayText = on && type === 'button' ? String(releaseDelay).trim().replace(',', '.') : '';
+      if (delayText) {
+        const d = Number(delayText);
+        if (!(d >= 0.5 && d <= 3600)) throw new Error('Släpp efter: ange sekunder mellan 0,5 och 3600, eller lämna tomt.');
+        if (!release.trim()) throw new Error('Släpp efter kräver ett värde vid släpp (dashboard.release), t.ex. 0.');
+      }
       const adv =
         kind === 'function' && type === 'button'
-          ? { press_msg: on ? msgA.trim() : '', release_msg: on ? msgB.trim() : '', topic: t }
+          ? { press_msg: on ? msgA.trim() : '', release_msg: on ? msgB.trim() : '', release_delay: delayText, topic: t }
           : kind === 'function' && type === 'switch'
             ? { on_msg: on ? msgA.trim() : '', off_msg: on ? msgB.trim() : '', topic: t }
             : {};
@@ -639,7 +647,7 @@ export function WidgetEditor({ kind, obj, raw, widgetType, layoutEntry, isNew, e
         <>
           <label className="check visible-check">
             <input type="checkbox" checked={advanced} onChange={(e) => setAdvanced(e.target.checked)} />
-            <span>Avancerat: meddelande och topic</span>
+            <span>{type === 'button' ? 'Avancerat: meddelande, fördröjning och topic' : 'Avancerat: meddelande och topic'}</span>
           </label>
           {advanced && (
             <>
@@ -651,6 +659,14 @@ export function WidgetEditor({ kind, obj, raw, widgetType, layoutEntry, isNew, e
                   <input value={msgB} onChange={(e) => setMsgB(e.target.value)} />
                 </Field>
               </div>
+              {type === 'button' && (
+                <Field
+                  label="Släpp efter, sekunder (dashboard.release_delay)"
+                  help={`Värdet vid släpp skickas så här länge efter tryckningen, i stället för när knappen släpps. Ett nytt tryck under tiden börjar om nedräkningen. Tiden räknas i webbläsaren: lämnar man sidan skickas värdet direkt, och stängs fliken eller tappar enheten nätet skickas inget. Tomt = när knappen släpps.`}
+                >
+                  <input value={releaseDelay} onChange={(e) => setReleaseDelay(e.target.value)} inputMode="decimal" placeholder="t.ex. 10" />
+                </Field>
+              )}
               <Field label="Topic att skicka på (dashboard.topic)" help={`Skickas nu till ${controlTopic({ meta: { ...m, [OBJ_META.topic]: topic } }, type === 'switch' ? onOffTopics(obj).write : writeTopic(obj)) || '(inget topic)'}.`}>
                 <select
                   value={customTopic ? '__custom' : topic}

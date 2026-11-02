@@ -184,23 +184,52 @@ export function ButtonWidget({ w, ctx }) {
   const release = String(fn.meta?.[OBJ_META.release] ?? '').trim();
   const pressMsg = String(fn.meta?.[OBJ_META.press_msg] ?? '').trim();
   const releaseMsg = String(fn.meta?.[OBJ_META.release_msg] ?? '').trim();
+  // a release delay (seconds): the release value goes that long after the press, not when the button is let go.
+  // The timer runs in this browser: it must stay open until then (leaving the page sends the release at once).
+  const delay = release !== '' ? Number(String(fn.meta?.[OBJ_META.release_delay] ?? '').replace(',', '.')) || 0 : 0;
   const [down, setDown] = useState(false);
   const [err, setErr] = useState('');
+  const [left, setLeft] = useState(0); // seconds until the delayed release, 0 = none pending
   const held = useRef(false);
+  const timer = useRef(null);
+  const sendRelease = useRef(() => {});
   const v = ctx.valueOf(fn);
 
+  sendRelease.current = () => {
+    clearInterval(timer.current?.tick);
+    clearTimeout(timer.current?.done);
+    timer.current = null;
+    setLeft(0);
+    if (release !== '' && !ctx.publish(write, release, releaseMsg)) setErr(ctx.notSent());
+  };
+  // leaving the page (or editing the widget) while a delay runs: the release is sent now, never forgotten
+  useEffect(() => () => timer.current && sendRelease.current(), []);
+
+  const startDelay = () => {
+    clearInterval(timer.current?.tick);
+    clearTimeout(timer.current?.done);
+    const until = Date.now() + delay * 1000;
+    setLeft(Math.ceil(delay));
+    timer.current = {
+      done: setTimeout(() => sendRelease.current(), delay * 1000),
+      tick: setInterval(() => setLeft(Math.max(0, Math.ceil((until - Date.now()) / 1000))), 250),
+    };
+  };
   const start = () => {
     if (held.current) return;
     if (!write) return setErr('Funktionen saknar topic_write');
+    // pressed again while the delay runs: the press is sent again and the delay starts over
     if (!ctx.publish(write, press, pressMsg)) return setErr(ctx.notSent());
     held.current = true;
     setErr('');
     setDown(true);
+    if (delay > 0) startDelay();
   };
   const end = () => {
     if (!held.current) return;
     held.current = false;
     setDown(false);
+    if (delay > 0) return; // the timer sends the release
     if (release !== '' && !ctx.publish(write, release, releaseMsg)) setErr(ctx.notSent());
   };
   const key = (e) => (e.key === ' ' || e.key === 'Enter') && (e.preventDefault(), e.type === 'keydown' ? !e.repeat && start() : end());
@@ -209,10 +238,10 @@ export function ButtonWidget({ w, ctx }) {
     <div className="w-button">
       <button
         type="button"
-        className={`push ${down ? 'down' : ''}`}
+        className={`push ${down ? 'down' : ''} ${left > 0 ? 'timing' : ''}`}
         disabled={!write}
-        title={write ? `Skickar ${press}${release !== '' ? `, ${release} när den släpps` : ''}` : 'Saknar topic_write'}
-        aria-pressed={down}
+        title={write ? `Skickar ${press}${release !== '' ? (delay > 0 ? `, ${release} efter ${delay} s` : `, ${release} när den släpps`) : ''}` : 'Saknar topic_write'}
+        aria-pressed={down || left > 0}
         onPointerDown={(e) => {
           e.currentTarget.setPointerCapture?.(e.pointerId);
           start();
@@ -228,7 +257,15 @@ export function ButtonWidget({ w, ctx }) {
         <Icon name={w.icon || 'bell'} size={20} />
         <span>{fnName(fn)}</span>
       </button>
-      {err ? <span className="err small">{err}</span> : v && <span className="muted small">{formatValue(fn, v.value)} · {formatAge(v.timestamp)}</span>}
+      {err ? (
+        <span className="err small">{err}</span>
+      ) : left > 0 ? (
+        <span className="muted small" aria-live="polite">
+          Skickar {release} om {left} s
+        </span>
+      ) : (
+        v && <span className="muted small">{formatValue(fn, v.value)} · {formatAge(v.timestamp)}</span>
+      )}
     </div>
   );
 }

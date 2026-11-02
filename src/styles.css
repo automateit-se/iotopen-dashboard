@@ -539,6 +539,8 @@ input[aria-invalid='true'] { border-color: var(--danger); }
 .push { touch-action: none; transition: transform 0.06s, filter 0.06s; box-shadow: 0 3px 0 color-mix(in srgb, var(--tile-color) 60%, #000); }
 .push.down { transform: translateY(2px); box-shadow: 0 1px 0 color-mix(in srgb, var(--tile-color) 60%, #000); filter: brightness(1.15); }
 .push:disabled { opacity: 0.45; cursor: not-allowed; }
+/* a delayed release is pending: the button stays lit until it is sent */
+.push.timing:not(.down) { filter: brightness(1.15); box-shadow: 0 0 0 3px color-mix(in srgb, var(--tile-color) 35%, transparent); }
 .push span, .link-btn-big span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .link-btn-big:hover, .push:hover:not(:disabled) { filter: brightness(1.08); }
 .w-button .muted { text-align: center; }
