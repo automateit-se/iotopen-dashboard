@@ -665,14 +665,14 @@ export function WidgetEditor({ kind, obj, raw, widgetType, layoutEntry, isNew, e
               {type === 'button' && (
                 <>
                   <div className="row gap">
-                    <Field label="Tillslagsfördröjning, s (dashboard.press_delay)" help="Knappen måste hållas inne så här länge innan värdet vid tryck skickas. Släpps den tidigare skickas inget. Tomt = direkt.">
+                    <Field label="Tillslagsfördröjning, s (dashboard.press_delay)" help="Värdet vid tryck skickas så här länge efter att knappen tryckts ned, även om den redan släppts. Tomt = direkt.">
                       <input value={pressDelay} onChange={(e) => setPressDelay(e.target.value)} inputMode="decimal" placeholder="t.ex. 2" />
                     </Field>
-                    <Field label="Frånslagsfördröjning, s (dashboard.release_delay)" help="Värdet vid släpp skickas så här länge efter att knappen släppts. Ett nytt tryck under tiden avbryter, och tiden börjar om när knappen släpps igen. Tomt = direkt.">
+                    <Field label="Frånslagsfördröjning, s (dashboard.release_delay)" help="Värdet vid släpp skickas så här länge efter att knappen släppts, men aldrig före värdet vid tryck. Ett nytt tryck under tiden avbryter, och tiden börjar om när knappen släpps igen. Tomt = direkt.">
                       <input value={releaseDelay} onChange={(e) => setReleaseDelay(e.target.value)} inputMode="decimal" placeholder="t.ex. 10" />
                     </Field>
                   </div>
-                  <p className="muted small">Tiderna räknas i webbläsaren. Lämnar man sidan skickas värdet vid släpp direkt, men stängs fliken eller tappar enheten nätet skickas inget. Det som alltid måste slås av hör hemma i enheten eller i Home Assistant.</p>
+                  <p className="muted small">Tiderna räknas i webbläsaren. Lämnar man sidan innan värdet vid tryck skickats skickas inget, och har det skickats skickas värdet vid släpp direkt. Stängs fliken eller tappar enheten nätet skickas inget. Det som alltid måste slås av hör hemma i enheten eller i Home Assistant.</p>
                 </>
               )}
               <Field label="Topic att skicka på (dashboard.topic)" help={`Skickas nu till ${controlTopic({ meta: { ...m, [OBJ_META.topic]: topic } }, type === 'switch' ? onOffTopics(obj).write : writeTopic(obj)) || '(inget topic)'}.`}>
