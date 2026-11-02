@@ -539,6 +539,12 @@ input[aria-invalid='true'] { border-color: var(--danger); }
 .push { touch-action: none; transition: transform 0.06s, filter 0.06s; box-shadow: 0 3px 0 color-mix(in srgb, var(--tile-color) 60%, #000); }
 .push.down { transform: translateY(2px); box-shadow: 0 1px 0 color-mix(in srgb, var(--tile-color) 60%, #000); filter: brightness(1.15); }
 .push:disabled { opacity: 0.45; cursor: not-allowed; }
+/* waiting for the on delay: the ring pulses until the press value is sent */
+.push.arming { animation: push-arming 0.9s ease-in-out infinite; }
+@keyframes push-arming { 50% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--tile-color) 40%, transparent); } }
+@media (prefers-reduced-motion: reduce) { .push.arming { animation: none; box-shadow: 0 0 0 4px color-mix(in srgb, var(--tile-color) 40%, transparent); } }
+/* a delayed release is pending: the button stays lit until it is sent */
+.push.timing:not(.down) { filter: brightness(1.15); box-shadow: 0 0 0 3px color-mix(in srgb, var(--tile-color) 35%, transparent); }
 .push span, .link-btn-big span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .link-btn-big:hover, .push:hover:not(:disabled) { filter: brightness(1.08); }
 .w-button .muted { text-align: center; }

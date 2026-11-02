@@ -149,13 +149,15 @@ export function WidgetEditor({ kind, obj, raw, widgetType, layoutEntry, isNew, e
   const setState = (i, patch) => setStates((rows) => rows.map((r, j) => (j === i ? { ...r, ...patch } : r)));
   const [press, setPress] = useState(m[OBJ_META.press] || '');
   const [release, setRelease] = useState(m[OBJ_META.release] || '');
+  const [pressDelay, setPressDelay] = useState(m[OBJ_META.press_delay] || '');
+  const [releaseDelay, setReleaseDelay] = useState(m[OBJ_META.release_delay] || '');
   // advanced control (switch/button): msg with the value, and another topic; hidden until "Avancerat" is ticked
   const [msgA, setMsgA] = useState(m[OBJ_META.press_msg] || m[OBJ_META.on_msg] || '');
   const [msgB, setMsgB] = useState(m[OBJ_META.release_msg] || m[OBJ_META.off_msg] || '');
   const [topic, setTopic] = useState(m[OBJ_META.topic] || '');
   const keys = topicKeys(obj);
   const [customTopic, setCustomTopic] = useState(() => !!m[OBJ_META.topic] && !keys.includes(m[OBJ_META.topic]));
-  const [advanced, setAdvanced] = useState(() => !!(m[OBJ_META.press_msg] || m[OBJ_META.release_msg] || m[OBJ_META.on_msg] || m[OBJ_META.off_msg] || m[OBJ_META.topic]));
+  const [advanced, setAdvanced] = useState(() => !!(m[OBJ_META.press_msg] || m[OBJ_META.release_msg] || m[OBJ_META.on_msg] || m[OBJ_META.off_msg] || m[OBJ_META.topic] || m[OBJ_META.press_delay] || m[OBJ_META.release_delay]));
   const initiallyVisible = !isHidden(obj);
   const [visible, setVisible] = useState(initiallyVisible);
   const [busy, setBusy] = useState(false);
@@ -233,9 +235,18 @@ export function WidgetEditor({ kind, obj, raw, widgetType, layoutEntry, isNew, e
       const on = advanced && kind === 'function';
       const t = on ? topic.trim() : '';
       if (t && !/^topic_/.test(t) && !/^[^\s#+]+$/.test(t)) throw new Error('Topic får inte innehålla mellanslag, # eller +.');
+      // on and off delay (seconds): a number from 0.5 to 3600; the off delay needs a value to send when it has passed
+      const secondsOf = (value, label) => {
+        const text = on && type === 'button' ? String(value).trim().replace(',', '.') : '';
+        if (text && !(Number(text) >= 0.5 && Number(text) <= 3600)) throw new Error(`${label}: ange sekunder mellan 0,5 och 3600, eller lämna tomt.`);
+        return text;
+      };
+      const pressDelayText = secondsOf(pressDelay, 'Tillslagsfördröjning');
+      const delayText = secondsOf(releaseDelay, 'Frånslagsfördröjning');
+      if (delayText && !release.trim()) throw new Error('Frånslagsfördröjning kräver ett värde vid släpp (dashboard.release), t.ex. 0.');
       const adv =
         kind === 'function' && type === 'button'
-          ? { press_msg: on ? msgA.trim() : '', release_msg: on ? msgB.trim() : '', topic: t }
+          ? { press_msg: on ? msgA.trim() : '', release_msg: on ? msgB.trim() : '', press_delay: pressDelayText, release_delay: delayText, topic: t }
           : kind === 'function' && type === 'switch'
             ? { on_msg: on ? msgA.trim() : '', off_msg: on ? msgB.trim() : '', topic: t }
             : {};
@@ -639,7 +650,7 @@ export function WidgetEditor({ kind, obj, raw, widgetType, layoutEntry, isNew, e
         <>
           <label className="check visible-check">
             <input type="checkbox" checked={advanced} onChange={(e) => setAdvanced(e.target.checked)} />
-            <span>Avancerat: meddelande och topic</span>
+            <span>{type === 'button' ? 'Avancerat: meddelande, fördröjning och topic' : 'Avancerat: meddelande och topic'}</span>
           </label>
           {advanced && (
             <>
@@ -651,6 +662,19 @@ export function WidgetEditor({ kind, obj, raw, widgetType, layoutEntry, isNew, e
                   <input value={msgB} onChange={(e) => setMsgB(e.target.value)} />
                 </Field>
               </div>
+              {type === 'button' && (
+                <>
+                  <div className="row gap">
+                    <Field label="Tillslagsfördröjning, s (dashboard.press_delay)" help="Värdet vid tryck skickas så här länge efter att knappen tryckts ned, även om den redan släppts. Tomt = direkt.">
+                      <input value={pressDelay} onChange={(e) => setPressDelay(e.target.value)} inputMode="decimal" placeholder="t.ex. 2" />
+                    </Field>
+                    <Field label="Frånslagsfördröjning, s (dashboard.release_delay)" help="Värdet vid släpp skickas så här länge efter att knappen släppts, men aldrig före värdet vid tryck. Ett nytt tryck under tiden avbryter, och tiden börjar om när knappen släpps igen. Tomt = direkt.">
+                      <input value={releaseDelay} onChange={(e) => setReleaseDelay(e.target.value)} inputMode="decimal" placeholder="t.ex. 10" />
+                    </Field>
+                  </div>
+                  <p className="muted small">Tiderna räknas i webbläsaren. Lämnar man sidan innan värdet vid tryck skickats skickas inget, och har det skickats skickas värdet vid släpp direkt. Stängs fliken eller tappar enheten nätet skickas inget. Det som alltid måste slås av hör hemma i enheten eller i Home Assistant.</p>
+                </>
+              )}
               <Field label="Topic att skicka på (dashboard.topic)" help={`Skickas nu till ${controlTopic({ meta: { ...m, [OBJ_META.topic]: topic } }, type === 'switch' ? onOffTopics(obj).write : writeTopic(obj)) || '(inget topic)'}.`}>
                 <select
                   value={customTopic ? '__custom' : topic}
