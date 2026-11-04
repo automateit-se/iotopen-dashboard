@@ -168,7 +168,7 @@ export const DEVICE_WIDGETS = [
   { id: 'media', label: 'Media', help: 'Mediaspelare: aktuell låt, status, spela/pausa, volym, mute och på/av från enhetens funktioner (…/playing, …/volume, …/mute, …/state, …/power).' },
   { id: 'thermostat', label: 'Termostat', help: 'Termostat: aktuell temperatur, börvärde med − / +, läge och drift från enhetens funktioner (…/current, …/target, …/mode, …/action).' },
 ];
-export const WIDGET_LABEL = { ...Object.fromEntries([...FUNCTION_WIDGETS, ...DEVICE_WIDGETS].map((w) => [w.id, w.label])), timeline: 'Tidslinje', multichart: 'Graf (flera)', tracker: 'Karta (Tracker)', www: 'Länkknapp (www)', mqtt: 'MQTT', text: 'Text', missing: 'Saknas' };
+export const WIDGET_LABEL = { ...Object.fromEntries([...FUNCTION_WIDGETS, ...DEVICE_WIDGETS].map((w) => [w.id, w.label])), timeline: 'Tidslinje', multichart: 'Graf (flera)', tracker: 'Karta (Tracker)', www: 'Länkknapp (www)', mqtt: 'MQTT', text: 'Text', image: 'Bild', missing: 'Saknas' };
 
 /** Widget types that can be half a row high, e.g. a banner across the top of the dashboard. */
 export const HALF_HEIGHT_TYPES = ['value', 'status', 'switch', 'button', 'www', 'mqtt', 'text'];
@@ -203,6 +203,7 @@ export const DEFAULT_LAYOUT = {
   www: { w: 2, h: 1 },
   mqtt: { w: 2, h: 1, mode: 'value' },
   text: { w: 4, h: 1, size: 'm' },
+  image: { w: 4, h: 2, fit: 'contain' },
   gauge: { w: 2, h: 2, min: 0, max: '' }, // empty max: automatic
   chart: { w: 4, h: 2, hours: 24 },
   card: { w: 4, h: 2 },
@@ -419,6 +420,20 @@ export function buildWidgets(raw, layout) {
       hidden: false,
     });
   }
+  // image widgets: only in the layout file, one of the installation's image files
+  for (const [key, l] of Object.entries(layout.widgets || {})) {
+    if (!key.startsWith(`${IMAGE_PREFIX}:`)) continue;
+    out.push({
+      key,
+      kind: 'image',
+      type: 'image',
+      name: String(l.label || '').trim(),
+      color: safeColor(l.color),
+      icon: '',
+      layout: { ...DEFAULT_LAYOUT.image, ...l },
+      hidden: false,
+    });
+  }
   // explicit order from the layout file first, then the rest by name
   return out.sort((a, b) => (a.layout.order ?? 1e9) - (b.layout.order ?? 1e9) || a.name.localeCompare(b.name, 'sv'));
 }
@@ -526,6 +541,16 @@ export const TEXT_SIZES = [
   ['xl', 'Mycket stor'],
 ];
 
+// ---- image widgets ----------------------------------------------------------------------------------
+export const IMAGE_PREFIX = 'b';
+
+/** A new, unused key for an image widget. */
+export const newImageKey = (layout) => {
+  let n = 1;
+  while (layout.widgets?.[`${IMAGE_PREFIX}:${n}`]) n++;
+  return `${IMAGE_PREFIX}:${n}`;
+};
+
 /** A new, unused key for a text widget. */
 export const newTextKey = (layout) => {
   let n = 1;
@@ -536,7 +561,7 @@ export const newTextKey = (layout) => {
 /** The functions a widget shows (for status): its own function, a device's functions, or a group's members. */
 export function widgetFunctions(w, raw) {
   if (w.functions) return w.functions;
-  if (w.kind === 'link' || w.kind === 'mqtt' || w.kind === 'text') return [];
+  if (w.kind === 'link' || w.kind === 'mqtt' || w.kind === 'text' || w.kind === 'image') return [];
   if (w.kind === 'device') return (raw?.functions || []).filter((f) => String(f.meta?.device_id) === String(w.obj.id) && !isHidden(f));
   if (w.type === 'consumption') return consumptionFunctions(w.obj, w.layout, raw);
   return w.obj ? [w.obj] : [];

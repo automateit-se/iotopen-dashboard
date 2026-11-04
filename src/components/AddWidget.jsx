@@ -22,7 +22,7 @@ const FINE_POINTER = typeof window !== 'undefined' && !!window.matchMedia?.('(ho
  * Lists functions and devices, grouped per device; a function that already has widgets can get another type: click a device to open it and pick one of its
  * functions (or the whole device as a card, or as a media player when it has media functions). Search and the miniatures narrow the list.
  */
-export function AddWidget({ raw, valueOf, onPick, onNewGroup, onNewLink, onNewMqtt, onNewText, onClose }) {
+export function AddWidget({ raw, valueOf, onPick, onNewGroup, onNewLink, onNewMqtt, onNewText, onNewImage, onClose }) {
   const [q, setQ] = useState('');
   const [type, setType] = useState('');
   const [open, setOpen] = useState(() => new Set());
@@ -110,6 +110,9 @@ export function AddWidget({ raw, valueOf, onPick, onNewGroup, onNewLink, onNewMq
         </button>
         <button type="button" className="btn block-left" onClick={onNewText}>
           <Icon name="edit" size={16} /> Ny textwidget med information om dashboarden
+        </button>
+        <button type="button" className="btn block-left" onClick={onNewImage}>
+          <Icon name="image" size={16} /> Ny bildwidget med en av installationens bilder
         </button>
       </div>
       <p className="muted small add-hint">
