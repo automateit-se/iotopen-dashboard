@@ -22,6 +22,7 @@ export const MAX_SHOWN = 500; // longest text shown in a value, log row or table
 export const MAX_TABLE_ROWS = 50;
 export const MAX_LOG_ROWS = 50;
 export const LOG_BUFFER = 500; // messages kept for log widgets, all MQTT widgets together
+export const MAX_TOPICS = 1000; // topics whose latest message is kept, all MQTT widgets together
 
 /** A new, unused key for an MQTT widget. */
 export const newMqttKey = (layout) => {
@@ -149,8 +150,10 @@ export function mqttState(states, v) {
 export const shortTopic = (full) => String(full || '').replace(/^\d+\//, '');
 
 /**
- * The store behind the MQTT widgets: the latest message per topic (all topics), and a shared log of recent
- * messages on topics that some MQTT widget listens to.
+ * The store behind the MQTT widgets: the latest message per topic and a shared log of recent messages, both only
+ * for topics that some MQTT widget listens to. Bounded, so many unique topics under a wildcard cannot fill the
+ * browser's memory: at most MAX_TOPICS topics (the one updated longest ago goes first) and LOG_BUFFER messages
+ * (held up to twice that between trims), each cut at MAX_TEXT characters.
  */
 export function createMqttStore() {
   const latest = new Map(); // topic (no client id) -> message
@@ -166,11 +169,14 @@ export function createMqttStore() {
       // a broker sends retained messages again for every new subscription: the same text is not a new event
       const prev = latest.get(topic);
       if (retained && prev && prev.text === body) return prev;
+      // only what a widget shows is kept (a function's topic is read from the status API, not from here)
+      if (!filters.some((f) => topicMatches(f, topic))) return m;
+      latest.delete(topic); // re-inserted last: the Map's order is the order of the latest updates
       latest.set(topic, m);
-      if (filters.some((f) => topicMatches(f, topic))) {
-        log.push(m);
-        if (log.length > LOG_BUFFER) log = log.slice(-LOG_BUFFER);
-      }
+      if (latest.size > MAX_TOPICS) latest.delete(latest.keys().next().value);
+      log.push(m);
+      // trimmed in steps, not per message, so a burst (e.g. an edge client's queue after an outage) stays cheap
+      if (log.length >= LOG_BUFFER * 2) log = log.slice(-LOG_BUFFER);
       return m;
     },
     /** Latest message per matching topic, sorted by topic. */
@@ -184,11 +190,21 @@ export function createMqttStore() {
       for (const m of this.latest(filter)) if (!best || m.received > best.received) best = m;
       return best;
     },
-    /** The last `n` logged messages on matching topics, newest first. */
+    /** The last `n` logged messages on matching topics, newest first (only the LOG_BUFFER newest are kept). */
     log(filter, n) {
       const out = [];
-      for (let i = log.length - 1; i >= 0 && out.length < n; i--) if (topicMatches(filter, log[i].topic)) out.push(log[i]);
+      for (let i = log.length - 1; i >= Math.max(0, log.length - LOG_BUFFER) && out.length < n; i--) if (topicMatches(filter, log[i].topic)) out.push(log[i]);
       return out;
+    },
+    /** Drops what no widget listens to any more (after the widgets' topic filters changed). */
+    prune(filters = []) {
+      const keep = (t) => filters.some((f) => topicMatches(f, t));
+      for (const t of [...latest.keys()]) if (!keep(t)) latest.delete(t);
+      log = log.filter((m) => keep(m.topic));
+    },
+    /** Number of topics kept (for tests). */
+    get size() {
+      return latest.size;
     },
     clear() {
       latest.clear();

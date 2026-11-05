@@ -94,6 +94,12 @@ const target = () => cur() || (directMode() ? defaultServer() : null);
 /** URL of an IoT Open API path, e.g. apiUrl('/api/v2/user/me'). */
 export const apiUrl = (path) => (target() ? `${target()}/${String(path).replace(/^\//, '')}` : appUrl(path));
 
+/** URL of an API path on a given server ('' = this container's own server), whatever the current one is. */
+export function apiUrlFor(server, path) {
+  const t = server || (directMode() ? defaultServer() : null);
+  return t ? `${t}/${String(path).replace(/^\//, '')}` : appUrl(path);
+}
+
 /** WebSocket URL of the MQTT broker. */
 export function mqttUrl() {
   const t = target();

@@ -1,5 +1,5 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { lynx, getToken, getTokenKind, setToken, setUnauthorizedHandler } from '../api/lynx.js';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { lynx, acceptLink, clearToken, dropLink, getToken, getTokenKind, holdToken, pendingLink, saveToken, setToken, setUnauthorizedHandler } from '../api/lynx.js';
 import { appUrl, config } from '../api/config.js';
 import { localLogin } from '../lib/local.js';
 
@@ -14,14 +14,26 @@ export function AppProvider({ children }) {
   const [booting, setBooting] = useState(!!getToken() || !!config.local);
   const [installations, setInstallations] = useState([]);
   const [brandLogo, setBrandLogo] = useState(null); // the open installation's logo (object URL), null = IoT Open
+  // a direct link (#token=…) that waits for the user's choice, see lynx.js
+  const [link, setLink] = useState(() => pendingLink());
 
   const signOut = useCallback(async (callApi = true) => {
     // an API key is not a session – DELETE /auth is only for tokens from a password login
     if (callApi && getTokenKind() !== 'apikey') await lynx.logout().catch(() => {});
-    setToken(null);
+    // a direct link's sign-in only leaves this tab: a remembered sign-in is then used again
+    const back = clearToken();
     setUser(null);
     setInstallations([]);
+    if (back) {
+      setBooting(true);
+      afterLoginRef
+        .current()
+        .catch(() => signOutRef.current(false))
+        .finally(() => setBooting(false));
+    }
   }, []);
+  const signOutRef = useRef(signOut);
+  signOutRef.current = signOut;
 
   useEffect(() => setUnauthorizedHandler(() => signOut(false)), [signOut]);
 
@@ -36,6 +48,44 @@ export function AppProvider({ children }) {
     setUser(me);
     return me;
   }, [refreshInstallations]);
+  const afterLoginRef = useRef(afterLogin);
+  afterLoginRef.current = afterLogin;
+
+  /**
+   * Signs in with a token that is only kept once IoT Open has accepted it (/user/me and the installations), so a
+   * failed sign-in leaves nothing behind that a reload could send anywhere.
+   */
+  const checkedSignIn = useCallback(
+    async (token, remember, kind) => {
+      holdToken(token, kind);
+      try {
+        const me = await afterLogin();
+        saveToken(remember);
+        return me;
+      } catch (e) {
+        holdToken(null);
+        setUser(null);
+        throw e;
+      }
+    },
+    [afterLogin],
+  );
+
+  /** The waiting direct link: sign in with it in this tab (true), or keep the current sign-in (false). */
+  const answerLink = useCallback(
+    (use) => {
+      setLink(null);
+      if (!use) return dropLink();
+      acceptLink();
+      setUser(null);
+      setInstallations([]);
+      setBooting(true);
+      afterLogin()
+        .catch(() => signOutRef.current(false))
+        .finally(() => setBooting(false));
+    },
+    [afterLogin],
+  );
 
   useEffect(() => {
     if (!getToken() && !config.local) return;
@@ -53,24 +103,15 @@ export function AppProvider({ children }) {
         e.tmpToken = res.token;
         throw e;
       }
-      setToken(res.token, remember);
-      return afterLogin();
+      return checkedSignIn(res.token, remember, 'session');
     },
-    [afterLogin],
+    [checkedSignIn],
   );
 
   /** Sign in with an IoT Open API key: it is used as X-API-Key directly, checked with /user/me. */
   const signInApiKey = useCallback(
-    async (key, remember) => {
-      setToken(key.trim(), remember, 'apikey');
-      try {
-        return await afterLogin();
-      } catch (e) {
-        setToken(null);
-        throw e;
-      }
-    },
-    [afterLogin],
+    async (key, remember) => checkedSignIn(key.trim(), remember, 'apikey'),
+    [checkedSignIn],
   );
 
   /**
@@ -90,15 +131,14 @@ export function AppProvider({ children }) {
   const signIn2fa = useCallback(
     async (tmpToken, challenge, remember) => {
       const res = await lynx.login2fa(tmpToken, challenge);
-      setToken(res.token, remember);
-      return afterLogin();
+      return checkedSignIn(res.token, remember, 'session');
     },
-    [afterLogin],
+    [checkedSignIn],
   );
 
   const value = useMemo(
-    () => ({ user, booting, signIn, signIn2fa, signInApiKey, signInLocal, signOut, installations, refreshInstallations, brandLogo, setBrandLogo }),
-    [user, booting, signIn, signIn2fa, signInApiKey, signInLocal, signOut, installations, refreshInstallations, brandLogo],
+    () => ({ user, booting, signIn, signIn2fa, signInApiKey, signInLocal, signOut, installations, refreshInstallations, brandLogo, setBrandLogo, link, answerLink }),
+    [user, booting, signIn, signIn2fa, signInApiKey, signInLocal, signOut, installations, refreshInstallations, brandLogo, link, answerLink],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

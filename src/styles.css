@@ -732,3 +732,11 @@ textarea { resize: vertical; min-height: 80px; }
 /* the layout file could not be read: editing is off until it has been */
 .error-box.layout-blocked { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .error-box.layout-blocked > span { flex: 1 1 240px; }
+
+/* a direct link waiting for the user's choice (pages/LinkConfirm.jsx) */
+.link-confirm p { margin: 0; }
+.link-facts { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 0; }
+.link-facts dt { color: var(--muted); }
+.link-facts dd { margin: 0; overflow-wrap: anywhere; }
+.link-facts .crit-text { color: var(--status-crit); }
+.link-actions { display: flex; gap: 10px; flex-wrap: wrap; }

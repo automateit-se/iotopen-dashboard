@@ -50,6 +50,9 @@ export function useInstallation(iid) {
   const mqttStore = useRef(null);
   if (!mqttStore.current) mqttStore.current = createMqttStore();
   const filtersRef = useRef([]); // topic filters of the MQTT widgets
+  // the topics whose values are kept (functions' read topics and the edge client's status): nothing else that
+  // arrives, e.g. under an MQTT widget's wildcard, grows the store of values
+  const knownRef = useRef(new Set());
 
   // the layout file: read, compared and written (queued) in one place, per installation
   const layoutStore = useMemo(
@@ -84,6 +87,7 @@ export function useInstallation(iid) {
       .map((t) => `${i.client_id}/${normTopic(t)}`);
     const widgetTopics = filtersRef.current.map((t) => `${i.client_id}/${t}`);
     const bridge = `${i.client_id}/${BRIDGE_STATUS}`;
+    knownRef.current = new Set([...topics.map(normTopic), BRIDGE_STATUS]);
     mqttRef.current.setSubscriptions([...topics, ...widgetTopics, ...EVENTS.map((e) => `${i.client_id}/${e}`), bridge]);
   }, []);
 
@@ -186,6 +190,8 @@ export function useInstallation(iid) {
       if (STRUCTURE_EVENTS.includes(m[2])) return debounce('structure', () => load({ withLayout: false, quiet: true }));
       if (m[2] === INSTALLATION_EVENT) return debounce('installation', reloadInstallation);
       if (m[2] === FILE_EVENT) return debounce('file', () => (reloadLayout(), reloadLogo(), setFileVersion((n) => n + 1)));
+      // a topic only an MQTT widget listens to: the widget's store above has it
+      if (!knownRef.current.has(m[2])) return scheduleTick();
       const entry = {
         topic: m[2],
         value: payload?.value,
@@ -220,6 +226,7 @@ export function useInstallation(iid) {
   const filterKey = JSON.stringify(mqttFilters(layout));
   useEffect(() => {
     filtersRef.current = JSON.parse(filterKey);
+    mqttStore.current.prune(filtersRef.current);
     updateSubscriptions();
   }, [filterKey, updateSubscriptions]);
 
