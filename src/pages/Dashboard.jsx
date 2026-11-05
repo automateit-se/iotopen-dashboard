@@ -23,7 +23,7 @@ import { EDGE_OFFLINE_TEXT, isBridgeStatus, sinceText, widgetEdgeStale } from '.
 import { currentModeText } from '../lib/thermostat.js';
 import { errText } from '../components/Modal.jsx';
 import { Icon } from '../components/icons.jsx';
-import { INST_META, OBJ_META, GROUPS, WIDGET_LABEL, THEME_META, EXTRA_FIELDS, applyTheme, isAdmin, writeLayout, writeObjectMeta, suggestType, widgetFunctions, fnName, stateColor, isLight, newLinkKey, newExtraKey, newTextKey, newImageKey, widgetTypes, widgetKey, keyOf, pagesOf, pageOfWidget, newPageId, writeBackground } from '../lib/dashboard.js';
+import { INST_META, OBJ_META, GROUPS, WIDGET_LABEL, THEME_META, EXTRA_FIELDS, applyTheme, isAdmin, writeObjectMeta, suggestType, widgetFunctions, fnName, stateColor, isLight, newLinkKey, newExtraKey, newTextKey, newImageKey, widgetTypes, widgetKey, keyOf, pagesOf, pageOfWidget, newPageId, writeBackground } from '../lib/dashboard.js';
 
 const LIVE_LABEL = { live: 'Live', connecting: 'Ansluter…', offline: 'Polling', failed: 'Polling', off: 'Polling' };
 
@@ -42,7 +42,7 @@ function useColumns() {
 export default function Dashboard({ iid, pageId = '' }) {
   const { user, setBrandLogo } = useApp();
   const ctx = useInstallation(iid);
-  const { inst, raw, layout, setLayout, widgets, logo, reloadLogo, error, loading, liveState, reload, edge } = ctx;
+  const { inst, raw, layout, updateLayout, layoutStatus, reloadLayout, fileVersion, widgets, logo, reloadLogo, error, loading, liveState, reload, edge } = ctx;
   const cols = useColumns();
   const [editing, setEditing] = useState(false);
   const [editor, setEditor] = useState(null); // { kind, obj, isNew }
@@ -65,6 +65,8 @@ export default function Dashboard({ iid, pageId = '' }) {
   // in the cloud, the edge client's bridge to IoT Open is down: values from it stop, commands to it are not sent
   const edgeDown = !local && liveState === 'live' && edge?.up === false;
   const admin = !local && inst && user ? isAdmin(user, inst) : false;
+  // nothing is edited before the layout file has been read: a failed read must not be saved over the real one
+  const layoutBlocked = !layoutStatus.loaded && !!layoutStatus.readError;
   // pages: the one in the address, else the first (locally the start page); each widget is on one page
   const allPages = pagesOf(layout);
   const pages = local ? localPages(allPages, local.pages) : allPages;
@@ -78,7 +80,9 @@ export default function Dashboard({ iid, pageId = '' }) {
   const title = inst?.meta?.[INST_META.title] || inst?.name || `Installation ${iid}`;
   // background image of the page (file dashboard-bg-<page>.jpg); with one, the widgets turn to glass
   const bg = backgroundOf(page);
-  const bgUrl = useBackground(iid, page.id, !!bg, layout);
+  // read again when the page's background setting or the installation's files change (also after a reconnect)
+  const [bgWritten, setBgWritten] = useState(0); // bumped after this dashboard wrote a background image
+  const bgUrl = useBackground(iid, page.id, !!bg, `${fileVersion}:${bgWritten}:${JSON.stringify(bg)}`);
   const glass = !!(bg && bgUrl);
 
   useEffect(() => {
@@ -96,12 +100,16 @@ export default function Dashboard({ iid, pageId = '' }) {
     return () => setBrandLogo(null);
   }, [logo, setBrandLogo]);
 
-  /** Writes the layout file and keeps the new layout locally. */
-  const saveLayout = async (next) => {
-    setLayout(next);
+  /**
+   * Edits the layout file: fn(newest layout) -> next layout, shown at once and written in turn (see
+   * lib/layoutStore.js). Editors await it, so a failed save keeps them open with the error.
+   */
+  const editLayout = (fn) => updateLayout(fn);
+  /** The same for direct edits (move, drag, page order): a failed save is shown above the widgets. */
+  const saveLayout = async (fn) => {
     setSaveError('');
     try {
-      await writeLayout(iid, next);
+      await updateLayout(fn);
     } catch (e) {
       setSaveError(`Layouten sparades inte: ${errText(e)}`);
     }
@@ -125,16 +133,18 @@ export default function Dashboard({ iid, pageId = '' }) {
     const type = metaValues.widget;
     const after = oldType ? before.map((t) => (t === oldType ? type : t)) : [...before, type];
     await writeObjectMeta(iid, kind, obj, { ...metaValues, widget: after.join(',') });
-    // freeze the current visual order so a new widget lands last instead of jumping first
-    const all = { ...layout.widgets };
-    widgets.forEach((w, i) => (all[w.key] = { ...(all[w.key] || {}), order: i }));
-    relayout(all, kind, obj, before, after, oldType && oldType !== type ? { [oldType]: type } : {});
-    const key = widgetKey(kind, obj.id, type, after.indexOf(type));
-    const entry = { ...(all[key] || {}), ...params };
-    if (!entry.color) delete entry.color;
-    if (entry.order === undefined) entry.order = widgets.length;
-    if (!oldType) Object.assign(entry, pageField);
-    await writeLayout(iid, { ...layout, widgets: { ...all, [key]: entry } });
+    await editLayout((cur) => {
+      // freeze the current visual order so a new widget lands last instead of jumping first
+      const all = { ...cur.widgets };
+      widgets.forEach((w, i) => (all[w.key] = { ...(all[w.key] || {}), order: i }));
+      relayout(all, kind, obj, before, after, oldType && oldType !== type ? { [oldType]: type } : {});
+      const key = widgetKey(kind, obj.id, type, after.indexOf(type));
+      const entry = { ...(all[key] || {}), ...params };
+      if (!entry.color) delete entry.color;
+      if (entry.order === undefined) entry.order = widgets.length;
+      if (!oldType) Object.assign(entry, pageField);
+      return { ...cur, widgets: { ...all, [key]: entry } };
+    });
     setEditor(null);
     await reload({ quiet: true });
   };
@@ -145,7 +155,7 @@ export default function Dashboard({ iid, pageId = '' }) {
     const after = before.filter((t) => t !== type);
     await writeObjectMeta(iid, kind, obj, { widget: after.join(',') });
     // the last one: the layout entry stays, so the widget comes back with its size
-    if (after.length) await writeLayout(iid, { ...layout, widgets: relayout({ ...layout.widgets }, kind, obj, before, after) });
+    if (after.length) await editLayout((cur) => ({ ...cur, widgets: relayout({ ...cur.widgets }, kind, obj, before, after) }));
     setEditor(null);
     await reload({ withLayout: !!after.length, quiet: true });
   };
@@ -164,22 +174,26 @@ export default function Dashboard({ iid, pageId = '' }) {
     if (own.label === String(base.meta?.[OBJ_META.nickname] || '')) own.label = '';
     if (own.icon === String(base.meta?.[OBJ_META.icon] || '')) own.icon = '';
     await writeObjectMeta(iid, kind, base, shared);
-    const all = { ...layout.widgets };
-    widgets.forEach((w, i) => (all[w.key] = { ...(all[w.key] || {}), order: i }));
-    const k = key || newExtraKey(layout);
-    const entry = { ...(all[k] || { order: widgets.length, ...pageField }), ...params, ...own, type, ref: keyOf(kind, base.id) };
-    for (const [p, v] of Object.entries(entry)) if (v === '' || v === undefined) delete entry[p];
-    if (key) for (const f of Object.values(EXTRA_FIELDS)) if (!own[f]) delete entry[f];
-    await writeLayout(iid, { ...layout, widgets: { ...all, [k]: entry } });
+    await editLayout((cur) => {
+      const all = { ...cur.widgets };
+      widgets.forEach((w, i) => (all[w.key] = { ...(all[w.key] || {}), order: i }));
+      const k = key || newExtraKey(cur);
+      const entry = { ...(all[k] || { order: widgets.length, ...pageField }), ...params, ...own, type, ref: keyOf(kind, base.id) };
+      for (const [p, v] of Object.entries(entry)) if (v === '' || v === undefined) delete entry[p];
+      if (key) for (const f of Object.values(EXTRA_FIELDS)) if (!own[f]) delete entry[f];
+      return { ...cur, widgets: { ...all, [k]: entry } };
+    });
     setEditor(null);
     await reload({ quiet: true });
   };
 
   /** Removes a layout-only widget (extra widget, link button). */
   const onRemoveEntry = async (key) => {
-    const all = { ...layout.widgets };
-    delete all[key];
-    await writeLayout(iid, { ...layout, widgets: all });
+    await editLayout((cur) => {
+      const all = { ...cur.widgets };
+      delete all[key];
+      return { ...cur, widgets: all };
+    });
     setEditor(null);
     setLinkEditor(null);
     setMqttEditor(null);
@@ -200,16 +214,18 @@ export default function Dashboard({ iid, pageId = '' }) {
       const next = want.has(f.id) ? name : cur === oldName ? '' : cur;
       if (next !== cur) await writeObjectMeta(iid, 'function', f, { [g.metaKey]: next });
     }
-    const all = { ...layout.widgets };
-    widgets.forEach((w, i) => (all[w.key] = { ...(all[w.key] || {}), order: i }));
-    const oldEntry = oldName ? all[`${g.prefix}:${oldName}`] : null;
-    if (oldName) delete all[`${g.prefix}:${oldName}`];
-    const { color, ...rest } = params;
-    const key = `${g.prefix}:${name}`;
-    all[key] = { ...(oldEntry || { order: widgets.length, ...pageField }), ...rest, ...(color ? { color } : {}) };
-    if (!color) delete all[key].color;
-    if (!Object.keys(all[key].series || {}).length) delete all[key].series;
-    await writeLayout(iid, { ...layout, widgets: all });
+    await editLayout((cur) => {
+      const all = { ...cur.widgets };
+      widgets.forEach((w, i) => (all[w.key] = { ...(all[w.key] || {}), order: i }));
+      const oldEntry = oldName ? all[`${g.prefix}:${oldName}`] : null;
+      if (oldName) delete all[`${g.prefix}:${oldName}`];
+      const { color, ...rest } = params;
+      const key = `${g.prefix}:${name}`;
+      all[key] = { ...(oldEntry || { order: widgets.length, ...pageField }), ...rest, ...(color ? { color } : {}) };
+      if (!color) delete all[key].color;
+      if (!Object.keys(all[key].series || {}).length) delete all[key].series;
+      return { ...cur, widgets: all };
+    });
     setTimelineEditor(null);
     await reload({ quiet: true });
   };
@@ -217,21 +233,25 @@ export default function Dashboard({ iid, pageId = '' }) {
   const onRemoveGroup = async (group, name) => {
     const g = GROUPS[group];
     for (const f of raw.functions) if (f.meta?.[g.metaKey] === name) await writeObjectMeta(iid, 'function', f, { [g.metaKey]: '' });
-    const all = { ...layout.widgets };
-    delete all[`${g.prefix}:${name}`];
-    await writeLayout(iid, { ...layout, widgets: all });
+    await editLayout((cur) => {
+      const all = { ...cur.widgets };
+      delete all[`${g.prefix}:${name}`];
+      return { ...cur, widgets: all };
+    });
     setTimelineEditor(null);
     await reload({ quiet: true });
   };
 
   /** Link buttons (www) exist only in the layout file. */
   const onSaveLink = async (key, params) => {
-    const all = { ...layout.widgets };
-    widgets.forEach((w, i) => (all[w.key] = { ...(all[w.key] || {}), order: i }));
-    const k = key || newLinkKey(layout);
-    all[k] = { ...(all[k] || { order: widgets.length, ...pageField }), ...params };
-    for (const p of ['color', 'icon', 'url', 'target_page', 'label']) if (!all[k][p]) delete all[k][p];
-    await writeLayout(iid, { ...layout, widgets: all });
+    await editLayout((cur) => {
+      const all = { ...cur.widgets };
+      widgets.forEach((w, i) => (all[w.key] = { ...(all[w.key] || {}), order: i }));
+      const k = key || newLinkKey(cur);
+      all[k] = { ...(all[k] || { order: widgets.length, ...pageField }), ...params };
+      for (const p of ['color', 'icon', 'url', 'target_page', 'label']) if (!all[k][p]) delete all[k][p];
+      return { ...cur, widgets: all };
+    });
     setLinkEditor(null);
     await reload({ quiet: true });
   };
@@ -240,48 +260,54 @@ export default function Dashboard({ iid, pageId = '' }) {
 
   /** MQTT widgets exist only in the layout file; empty settings are left out of the entry. */
   const onSaveMqtt = async (key, params) => {
-    const all = { ...layout.widgets };
-    widgets.forEach((w, i) => (all[w.key] = { ...(all[w.key] || {}), order: i }));
-    const k = key || newMqttKey(layout);
-    all[k] = { ...(all[k] || { order: widgets.length, ...pageField }), ...params };
-    for (const [p, v] of Object.entries(all[k])) if (v === '' || v === undefined || v === null) delete all[k][p];
-    await writeLayout(iid, { ...layout, widgets: all });
+    await editLayout((cur) => {
+      const all = { ...cur.widgets };
+      widgets.forEach((w, i) => (all[w.key] = { ...(all[w.key] || {}), order: i }));
+      const k = key || newMqttKey(cur);
+      all[k] = { ...(all[k] || { order: widgets.length, ...pageField }), ...params };
+      for (const [p, v] of Object.entries(all[k])) if (v === '' || v === undefined || v === null) delete all[k][p];
+      return { ...cur, widgets: all };
+    });
     setMqttEditor(null);
     await reload({ quiet: true });
   };
 
   /** Text widgets exist only in the layout file; empty settings and unset styles are left out of the entry. */
   const onSaveText = async (key, params) => {
-    const all = { ...layout.widgets };
-    widgets.forEach((w, i) => (all[w.key] = { ...(all[w.key] || {}), order: i }));
-    const k = key || newTextKey(layout);
-    all[k] = { ...(all[k] || { order: widgets.length, ...pageField }), ...params };
-    for (const [p, v] of Object.entries(all[k])) if (v === '' || v === false || v === undefined || v === null) delete all[k][p];
-    await writeLayout(iid, { ...layout, widgets: all });
+    await editLayout((cur) => {
+      const all = { ...cur.widgets };
+      widgets.forEach((w, i) => (all[w.key] = { ...(all[w.key] || {}), order: i }));
+      const k = key || newTextKey(cur);
+      all[k] = { ...(all[k] || { order: widgets.length, ...pageField }), ...params };
+      for (const [p, v] of Object.entries(all[k])) if (v === '' || v === false || v === undefined || v === null) delete all[k][p];
+      return { ...cur, widgets: all };
+    });
     setTextEditor(null);
     await reload({ quiet: true });
   };
 
   /** Image widgets exist only in the layout file, like text widgets. */
   const onSaveImage = async (key, params) => {
-    const all = { ...layout.widgets };
-    widgets.forEach((w, i) => (all[w.key] = { ...(all[w.key] || {}), order: i }));
-    const k = key || newImageKey(layout);
-    all[k] = { ...(all[k] || { order: widgets.length, ...pageField }), ...params };
-    for (const [p, v] of Object.entries(all[k])) if (v === '' || v === false || v === undefined || v === null) delete all[k][p];
-    await writeLayout(iid, { ...layout, widgets: all });
+    await editLayout((cur) => {
+      const all = { ...cur.widgets };
+      widgets.forEach((w, i) => (all[w.key] = { ...(all[w.key] || {}), order: i }));
+      const k = key || newImageKey(cur);
+      all[k] = { ...(all[k] || { order: widgets.length, ...pageField }), ...params };
+      for (const [p, v] of Object.entries(all[k])) if (v === '' || v === false || v === undefined || v === null) delete all[k][p];
+      return { ...cur, widgets: all };
+    });
     setImageEditor(null);
     await reload({ quiet: true });
   };
 
   /** Moves a widget to another page (the first page = no "page" in its entry). */
   const moveToPage = (w, id) => {
-    const next = { ...layout, widgets: { ...layout.widgets } };
-    const entry = { ...(next.widgets[w.key] || {}) };
-    if (id === pages[0].id) delete entry.page;
-    else entry.page = id;
-    next.widgets[w.key] = entry;
-    saveLayout(next);
+    saveLayout((cur) => {
+      const entry = { ...(cur.widgets[w.key] || {}) };
+      if (id === pages[0].id) delete entry.page;
+      else entry.page = id;
+      return { ...cur, widgets: { ...cur.widgets, [w.key]: entry } };
+    });
   };
 
   /**
@@ -289,34 +315,44 @@ export default function Dashboard({ iid, pageId = '' }) {
    * new background image (Blob), null to remove it, undefined to keep it; it is written before the layout.
    */
   const onSavePage = async (id, values, image) => {
-    const list = layout.pages?.length ? [...layout.pages] : [{ ...pages[0] }];
-    const target = id || newPageId(values.title, list);
-    if (image !== undefined) await writeBackground(iid, target, image);
-    if (id) list.splice(list.findIndex((p) => p.id === id), 1, { ...list.find((p) => p.id === id), ...values });
-    else list.push({ id: target, ...values });
-    for (const p of list) {
-      if (p.theme && !Object.keys(p.theme).length) delete p.theme;
-      if (!p.background) delete p.background;
+    const target = id || newPageId(values.title, layout.pages?.length ? layout.pages : [pages[0]]);
+    if (image !== undefined) {
+      await writeBackground(iid, target, image);
+      setBgWritten((n) => n + 1);
     }
-    await saveLayout({ ...layout, pages: list });
+    await editLayout((cur) => {
+      const list = cur.pages?.length ? cur.pages.map((p) => ({ ...p })) : [{ ...pages[0] }];
+      const at = list.findIndex((p) => p.id === target);
+      if (at >= 0) list.splice(at, 1, { ...list[at], ...values });
+      else list.push({ id: target, ...values });
+      for (const p of list) {
+        if (p.theme && !Object.keys(p.theme).length) delete p.theme;
+        if (!p.background) delete p.background;
+      }
+      return { ...cur, pages: list };
+    });
     setPageEditor(null);
     navigate(target);
   };
 
   const onRemovePage = async (id) => {
     if (backgroundOf(pages.find((p) => p.id === id))) await writeBackground(iid, id, null);
-    const list = (layout.pages || []).filter((p) => p.id !== id);
-    const all = { ...layout.widgets };
-    for (const [k, e] of Object.entries(all)) {
-      if (e?.page === id || (e?.page && e.page === list[0]?.id)) {
-        const { page: _p, ...restEntry } = e;
-        all[k] = restEntry;
+    let first = '';
+    await editLayout((cur) => {
+      const list = (cur.pages || []).filter((p) => p.id !== id);
+      const all = { ...cur.widgets };
+      for (const [k, e] of Object.entries(all)) {
+        if (e?.page === id || (e?.page && e.page === list[0]?.id)) {
+          const { page: _p, ...restEntry } = e;
+          all[k] = restEntry;
+        }
+        if (e?.target_page === id) all[k] = { ...all[k], target_page: list[0]?.id || '' };
       }
-      if (e?.target_page === id) all[k] = { ...all[k], target_page: list[0]?.id || '' };
-    }
-    await saveLayout({ ...layout, pages: list.length ? list : undefined, widgets: all });
+      first = list[0]?.id || '';
+      return { ...cur, pages: list.length ? list : undefined, widgets: all };
+    });
     setPageEditor(null);
-    navigate(list[0]?.id || '');
+    navigate(first);
   };
 
   /** Moves a page one step left (-1) or right (+1) in the tabs. */
@@ -327,14 +363,16 @@ export default function Dashboard({ iid, pageId = '' }) {
     if (j < 0 || j >= list.length) return;
     [list[i], list[j]] = [list[j], list[i]];
     // the first page holds the widgets without "page": every widget keeps its page when the first one changes
-    const all = { ...layout.widgets };
-    for (const w of widgets) {
-      const cur = pageOfWidget(w, pages);
-      all[w.key] = { ...(all[w.key] || {}) };
-      if (cur === list[0].id) delete all[w.key].page;
-      else all[w.key].page = cur;
-    }
-    saveLayout({ ...layout, pages: list, widgets: all });
+    saveLayout((lay) => {
+      const all = { ...lay.widgets };
+      for (const w of widgets) {
+        const cur = pageOfWidget(w, pages);
+        all[w.key] = { ...(all[w.key] || {}) };
+        if (cur === list[0].id) delete all[w.key].page;
+        else all[w.key].page = cur;
+      }
+      return { ...lay, pages: list, widgets: all };
+    });
   };
 
   const navigate = (id) => {
@@ -360,10 +398,12 @@ export default function Dashboard({ iid, pageId = '' }) {
     const from = keys.indexOf(dragKey);
     keys.splice(from, 1);
     keys.splice(keys.indexOf(targetKey) + (from <= keys.indexOf(targetKey) ? 1 : 0), 0, dragKey);
-    const next = { ...layout, widgets: { ...layout.widgets } };
-    keys.forEach((k, i) => (next.widgets[k] = { ...(next.widgets[k] || {}), order: i }));
     setDragKey(null);
-    saveLayout(next);
+    saveLayout((cur) => {
+      const all = { ...cur.widgets };
+      keys.forEach((k, i) => (all[k] = { ...(all[k] || {}), order: i }));
+      return { ...cur, widgets: all };
+    });
   };
 
   if (error && !inst) {
@@ -407,7 +447,7 @@ export default function Dashboard({ iid, pageId = '' }) {
             <span className="dot" /> {cutOff ? 'Lokalt' : edgeDown ? EDGE_OFFLINE_TEXT : LIVE_LABEL[liveState] || liveState}
           </span>
           {admin && !editing && (
-            <button type="button" className="btn" onClick={() => setEditing(true)}>
+            <button type="button" className="btn" onClick={() => setEditing(true)} disabled={!layoutStatus.loaded} title={layoutStatus.loaded ? undefined : 'Layouten har inte lästs än'}>
               <Icon name="edit" size={16} /> Redigera
             </button>
           )}
@@ -440,6 +480,16 @@ export default function Dashboard({ iid, pageId = '' }) {
         />
       )}
       {editing && <div className="info-box">Redigeringsläge. Dra i en widget för att flytta den, klicka på kugghjulet för att ändra den. Allt sparas direkt i IoT Open.</div>}
+      {layoutBlocked && admin && (
+        <div className="error-box layout-blocked">
+          <span>
+            Layouten kunde inte läsas från IoT Open ({errText(layoutStatus.readError)}). Widgetarna visas i standardordning, och inget kan ändras förrän layouten har lästs.
+          </span>
+          <button type="button" className="btn" onClick={reloadLayout}>
+            Försök igen
+          </button>
+        </div>
+      )}
       {saveError && <div className="error-box">{saveError}</div>}
       {error && inst && <div className="error-box">Kunde inte läsa om installationen: {errText(error)}</div>}
 
@@ -451,7 +501,7 @@ export default function Dashboard({ iid, pageId = '' }) {
           <p className="muted">
             En enhet eller funktion visas när den har metadata <code>{OBJ_META.widget}</code>, till exempel <code>value</code>, <code>chart</code>, <code>gauge</code>, <code>switch</code>, <code>status</code> eller <code>card</code>.
           </p>
-          {admin && (
+          {admin && layoutStatus.loaded && (
             <button
               type="button"
               className="btn primary"

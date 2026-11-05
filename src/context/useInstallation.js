@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { lynx, getToken, normTopic } from '../api/lynx.js';
 import { createMqtt, defaultMqttUrl } from '../api/mqtt.js';
 import { config } from '../api/config.js';
-import { buildWidgets, readLayout, readLogo } from '../lib/dashboard.js';
+import { buildWidgets, readLayout, readLogo, writeLayout } from '../lib/dashboard.js';
+import { createLayoutStore } from '../lib/layoutStore.js';
 import { createMqttStore, mqttFilters } from '../lib/mqttWidget.js';
 import { refreshLocalStatus, setLocalBridge } from '../components/LocalBar.jsx';
 import { BRIDGE_STATUS, EDGE_NOT_SENT, edgeStale, nextEdge } from '../lib/edge.js';
@@ -31,6 +32,8 @@ export function useInstallation(iid) {
   const [fileVersion, setFileVersion] = useState(0);
   const [raw, setRaw] = useState(null); // { devices, functions }
   const [layout, setLayout] = useState({ version: 2, widgets: {} });
+  // { loaded, readError, saving, saveError } of the layout file (see lib/layoutStore.js)
+  const [layoutStatus, setLayoutStatus] = useState({ loaded: false, readError: null, saving: false, saveError: null });
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
   const [liveState, setLiveState] = useState('off');
@@ -47,6 +50,20 @@ export function useInstallation(iid) {
   const mqttStore = useRef(null);
   if (!mqttStore.current) mqttStore.current = createMqttStore();
   const filtersRef = useRef([]); // topic filters of the MQTT widgets
+
+  // the layout file: read, compared and written (queued) in one place, per installation
+  const layoutStore = useMemo(
+    () =>
+      createLayoutStore({
+      read: () => readLayout(iid),
+      write: (next, expectHash) => writeLayout(iid, next, expectHash),
+      onLayout: setLayout,
+      onStatus: setLayoutStatus,
+      }),
+    [iid],
+  );
+  /** Edits the layout: fn(newest layout) -> next layout. Resolves once written; rejects when not saved. */
+  const updateLayout = useCallback((fn) => layoutStore.update(fn), [layoutStore]);
 
   const bump = useRef(null);
   const scheduleTick = useCallback(() => {
@@ -75,12 +92,12 @@ export function useInstallation(iid) {
     async ({ withLayout = true, quiet = false } = {}) => {
       if (!quiet) setLoading(true);
       try {
-        const [installation, devices, functions, statuses, lay] = await Promise.all([
+        const [installation, devices, functions, statuses] = await Promise.all([
           lynx.installation(iid),
           lynx.devices(iid),
           lynx.functions(iid),
           lynx.status(iid).catch(() => []),
-          withLayout ? readLayout(iid) : null,
+          withLayout ? layoutStore.refresh() : null,
         ]);
         for (const s of statuses || []) {
           const old = byTopic.current.get(s.topic);
@@ -96,7 +113,6 @@ export function useInstallation(iid) {
         rawRef.current = { devices: devices || [], functions: functions || [] };
         setInst(merged);
         setRaw(rawRef.current);
-        if (lay) setLayout(lay);
         setError(null);
         updateSubscriptions();
         setTick((t) => t + 1);
@@ -106,7 +122,7 @@ export function useInstallation(iid) {
         setLoading(false);
       }
     },
-    [iid, updateSubscriptions],
+    [iid, updateSubscriptions, layoutStore],
   );
 
   /** Installation metadata only (title, colours, admins). */
@@ -120,15 +136,8 @@ export function useInstallation(iid) {
     }
   }, [iid]);
 
-  /** Layout file only; skipped when the content did not change (e.g. our own save). */
-  const reloadLayout = useCallback(async () => {
-    try {
-      const lay = await readLayout(iid);
-      setLayout((cur) => (JSON.stringify(cur.widgets) === JSON.stringify(lay.widgets) ? cur : lay));
-    } catch {
-      /* ignore */
-    }
-  }, [iid]);
+  /** Layout file only; shown only when its content changed, and only once no own save is queued. */
+  const reloadLayout = useCallback(() => layoutStore.refresh(), [layoutStore]);
 
   /** Logo file; downloaded only when its hash changed. */
   const logoRef = useRef({ hash: null, url: null });
@@ -202,8 +211,10 @@ export function useInstallation(iid) {
     setInst(null);
     setRaw(null);
     setEdge(null);
+    setLayout(layoutStore.get());
+    setLayoutStatus(layoutStore.status());
     load();
-  }, [load]);
+  }, [load, layoutStore]);
 
   // MQTT widgets: subscribe to their topics whenever the layout changes
   const filterKey = JSON.stringify(mqttFilters(layout));
@@ -226,22 +237,32 @@ export function useInstallation(iid) {
     };
   }, [onMessage, updateSubscriptions]);
 
+  /**
+   * Everything that may have changed without an event reaching us (offline, polling): values, structure, meta,
+   * layout, and the files - image widgets, backgrounds and the logo read them again.
+   */
+  const reloadAll = useCallback(() => {
+    load({ quiet: true });
+    setFileVersion((n) => n + 1);
+    reloadLogo();
+  }, [load, reloadLogo]);
+
   // REST polling only while MQTT is not live; after a reconnect, re-read so nothing is missed
   const liveRef = useRef(liveState);
   useEffect(() => {
     // (re)connected: anything that changed while offline – values, structure, meta, layout – is read once
-    if (liveState === 'live' && liveRef.current !== 'live' && rawRef.current) load({ quiet: true });
+    if (liveState === 'live' && liveRef.current !== 'live' && rawRef.current) reloadAll();
     // local mode: the app's own status (session, IoT Open) when the connection to it changes
     if (config.local && liveState !== liveRef.current) refreshLocalStatus();
     liveRef.current = liveState;
-  }, [liveState, load]);
+  }, [liveState, reloadAll]);
   useEffect(() => {
     const t = setInterval(() => {
-      if (liveRef.current !== 'live') load({ quiet: true });
+      if (liveRef.current !== 'live') reloadAll();
       else setTick((x) => x + 1); // refresh "x min ago"
     }, POLL_MS);
     return () => clearInterval(t);
-  }, [load]);
+  }, [reloadAll]);
 
   const onLive = useCallback((fn) => {
     listeners.current.add(fn);
@@ -290,5 +311,5 @@ export function useInstallation(iid) {
 
   const widgets = useMemo(() => (raw ? buildWidgets(raw, layout) : []), [raw, layout]);
 
-  return { inst, raw, layout, setLayout, widgets, logo, reloadLogo, error, loading, liveState, tick, valueOf, valueOfTopic, onLive, publish, notSent, edge, mqtt, reload: load, fileVersion };
+  return { inst, raw, layout, updateLayout, layoutStatus, reloadLayout, widgets, logo, reloadLogo, error, loading, liveState, tick, valueOf, valueOfTopic, onLive, publish, notSent, edge, mqtt, reload: load, fileVersion };
 }

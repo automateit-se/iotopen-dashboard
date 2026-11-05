@@ -728,3 +728,7 @@ textarea { resize: vertical; min-height: 80px; }
 .image-pick button.on { background: color-mix(in srgb, var(--accent) 14%, transparent); font-weight: 600; }
 .image-pick li.muted { padding: 8px 10px; }
 .image-preview { height: 160px; margin: 0 0 12px; border-radius: 8px; overflow: hidden; background: var(--surface-2); }
+
+/* the layout file could not be read: editing is off until it has been */
+.error-box.layout-blocked { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.error-box.layout-blocked > span { flex: 1 1 240px; }
