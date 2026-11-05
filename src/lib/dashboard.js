@@ -42,6 +42,7 @@ import { stateMap, stateFor } from './format.js';
 import { MQTT_PREFIX } from './mqttWidget.js';
 import { backgroundFile } from './background.js';
 import { assertStorable } from './metaValue.js';
+import { LayoutConflict } from './layoutStore.js';
 
 /** A colour from metadata or the layout file, or '' – anything that is not a valid CSS colour is ignored. */
 export const safeColor = (v) => {
@@ -613,23 +614,30 @@ function upgradeLayout(data) {
   return { ...data, version: 2, widgets };
 }
 
+/**
+ * The layout file and its hash: { layout, hash }. A missing file is an empty layout (hash null); a failed read
+ * (network, access, download, a damaged file) throws, so it is never mistaken for an empty layout.
+ */
 export async function readLayout(iid) {
   const empty = { version: 2, widgets: {} };
-  const f = await findFile(iid, LAYOUT_FILE).catch(() => null);
-  if (!f) return empty;
-  try {
-    const data = JSON.parse(await (await lynx.downloadFile(f.hash)).text());
-    return upgradeLayout({ ...empty, ...data, widgets: data.widgets || {} });
-  } catch {
-    return empty;
-  }
+  const f = await findFile(iid, LAYOUT_FILE);
+  if (!f) return { layout: empty, hash: null };
+  const data = JSON.parse(await (await lynx.downloadFile(f.hash)).text());
+  if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('Layoutfilen är skadad');
+  return { layout: upgradeLayout({ ...empty, ...data, widgets: data.widgets || {} }), hash: f.hash };
 }
 
-export async function writeLayout(iid, layout) {
+/**
+ * Writes the layout file and resolves to its new hash. With expectHash (null = no file), the write stops with a
+ * LayoutConflict when the file is not the one last read or written.
+ */
+export async function writeLayout(iid, layout, expectHash) {
   const body = { ...layout, version: 2, updated: new Date().toISOString() };
   const blob = new Blob([JSON.stringify(body, null, 2)], { type: 'application/json' });
   const f = await findFile(iid, LAYOUT_FILE);
-  return f ? lynx.replaceFile(iid, f.id, blob, LAYOUT_FILE) : lynx.uploadFile(iid, blob, LAYOUT_FILE);
+  if (expectHash !== undefined && (f?.hash ?? null) !== expectHash) throw new LayoutConflict();
+  const res = f ? await lynx.replaceFile(iid, f.id, blob, LAYOUT_FILE) : await lynx.uploadFile(iid, blob, LAYOUT_FILE);
+  return res?.hash || (await findFile(iid, LAYOUT_FILE))?.hash || null;
 }
 
 // ---- logo file (File API) -------------------------------------------------------------

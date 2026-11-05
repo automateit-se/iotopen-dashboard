@@ -312,6 +312,7 @@ setInterval(() => {
 }, 10000);
 
 const files = [];
+let failFiles = false; // POST /mock/files?fail=1
 const blobs = new Map();
 function addFile(iid, name, mime, buf) {
   const hash = crypto.createHash('sha256').update(buf).update(String(Math.random())).digest('hex');
@@ -451,6 +452,7 @@ async function api(req, res, url) {
   }
 
   if (seg[2] === 'file') {
+    if (failFiles && m === 'GET') return send(res, 503, { message: 'Service Unavailable' });
     if (seg[3] === 'download') { const b = blobs.get(seg[4]); return b ? send(res, 200, b.buf, { 'Content-Type': b.mime }) : send(res, 404, { message: 'Not found' }); }
     const iid = Number(seg[4]);
     const id = seg[5] ? Number(seg[5]) : null;
@@ -484,6 +486,8 @@ const server = http.createServer(async (req, res) => {
   try {
     if (url.pathname.startsWith('/api/')) return await api(req, res, url);
     if (url.pathname === '/mock/edge') return send(res, 200, setEdge(url.searchParams.get('up') !== '0'));
+    // file reads fail (503) until ?fail=0, to try the dashboard's handling of an unreadable layout file
+    if (url.pathname === '/mock/files') return send(res, 200, { fail: (failFiles = url.searchParams.get('fail') !== '0') });
     send(res, 404, { message: 'Not found' });
   } catch (e) {
     console.error(e);

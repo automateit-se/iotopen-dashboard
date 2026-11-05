@@ -6,7 +6,8 @@ const cache = new Map(); // "<iid>/<page id>" -> { hash, url }
 
 /**
  * Object URL of a page's background image, null when it has none. Looked up again when `version` changes (the
- * layout object: a new image is always saved together with the layout), downloaded only when its hash changed.
+ * page's background setting or the installation's files, also after a reconnect), downloaded only when its hash
+ * changed.
  */
 export function useBackground(iid, pageId, wanted, version) {
   const key = `${iid}/${pageId}`;
