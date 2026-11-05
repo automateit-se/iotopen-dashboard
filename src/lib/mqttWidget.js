@@ -152,8 +152,8 @@ export const shortTopic = (full) => String(full || '').replace(/^\d+\//, '');
 /**
  * The store behind the MQTT widgets: the latest message per topic and a shared log of recent messages, both only
  * for topics that some MQTT widget listens to. Bounded, so many unique topics under a wildcard cannot fill the
- * browser's memory: at most MAX_TOPICS topics (the one updated longest ago goes first) and LOG_BUFFER messages,
- * each cut at MAX_TEXT characters.
+ * browser's memory: at most MAX_TOPICS topics (the one updated longest ago goes first) and LOG_BUFFER messages
+ * (held up to twice that between trims), each cut at MAX_TEXT characters.
  */
 export function createMqttStore() {
   const latest = new Map(); // topic (no client id) -> message
@@ -175,7 +175,8 @@ export function createMqttStore() {
       latest.set(topic, m);
       if (latest.size > MAX_TOPICS) latest.delete(latest.keys().next().value);
       log.push(m);
-      if (log.length > LOG_BUFFER) log = log.slice(-LOG_BUFFER);
+      // trimmed in steps, not per message, so a burst (e.g. an edge client's queue after an outage) stays cheap
+      if (log.length >= LOG_BUFFER * 2) log = log.slice(-LOG_BUFFER);
       return m;
     },
     /** Latest message per matching topic, sorted by topic. */
@@ -189,10 +190,10 @@ export function createMqttStore() {
       for (const m of this.latest(filter)) if (!best || m.received > best.received) best = m;
       return best;
     },
-    /** The last `n` logged messages on matching topics, newest first. */
+    /** The last `n` logged messages on matching topics, newest first (only the LOG_BUFFER newest are kept). */
     log(filter, n) {
       const out = [];
-      for (let i = log.length - 1; i >= 0 && out.length < n; i--) if (topicMatches(filter, log[i].topic)) out.push(log[i]);
+      for (let i = log.length - 1; i >= Math.max(0, log.length - LOG_BUFFER) && out.length < n; i--) if (topicMatches(filter, log[i].topic)) out.push(log[i]);
       return out;
     },
     /** Drops what no widget listens to any more (after the widgets' topic filters changed). */

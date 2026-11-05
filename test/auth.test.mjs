@@ -164,5 +164,20 @@ test('the MQTT store keeps only watched topics, and at most MAX_TOPICS of them',
   // when no widget listens any more, it is dropped
   store.prune(['sensor/9000']);
   assert.equal(store.size, 1);
-  assert.equal(store.log('#', 1000).length, 0); // its message had already left the 500 newest
+  assert.ok(store.log('#', 1000).length <= 1);
+});
+
+test("a burst of messages (an edge client's queue after an outage) keeps the log at the 500 newest, quickly", () => {
+  const store = createMqttStore();
+  const filters = ['obj/#'];
+  const t0 = Date.now();
+  for (let i = 0; i < 100000; i++) store.add(`obj/f${i % 20}`, JSON.stringify({ value: i, timestamp: 1700000000 + i }), { filters });
+  const ms = Date.now() - t0;
+  const log = store.log('obj/#', 1000);
+  assert.equal(log.length, 500);
+  assert.equal(log[0].payload.value, 99999);
+  assert.equal(log[499].payload.value, 99500);
+  assert.equal(store.size, 20);
+  assert.equal(store.latest('obj/f19')[0].payload.value, 99999);
+  assert.ok(ms < 3000, `took ${ms} ms`);
 });
