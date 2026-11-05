@@ -9,6 +9,7 @@ import { TimelineEditor } from '../components/TimelineEditor.jsx';
 import { LinkEditor } from '../components/LinkEditor.jsx';
 import { MqttEditor } from '../components/MqttEditor.jsx';
 import { TextEditor } from '../components/TextEditor.jsx';
+import { ImageEditor } from '../components/ImageEditor.jsx';
 import { mqttShown } from '../components/widgets/Mqtt.jsx';
 import { newMqttKey } from '../lib/mqttWidget.js';
 import { PageEditor, PageTabs } from '../components/Pages.jsx';
@@ -22,7 +23,7 @@ import { EDGE_OFFLINE_TEXT, isBridgeStatus, sinceText, widgetEdgeStale } from '.
 import { currentModeText } from '../lib/thermostat.js';
 import { errText } from '../components/Modal.jsx';
 import { Icon } from '../components/icons.jsx';
-import { INST_META, OBJ_META, GROUPS, WIDGET_LABEL, THEME_META, EXTRA_FIELDS, applyTheme, isAdmin, writeLayout, writeObjectMeta, suggestType, widgetFunctions, fnName, stateColor, isLight, newLinkKey, newExtraKey, newTextKey, widgetTypes, widgetKey, keyOf, pagesOf, pageOfWidget, newPageId, writeBackground } from '../lib/dashboard.js';
+import { INST_META, OBJ_META, GROUPS, WIDGET_LABEL, THEME_META, EXTRA_FIELDS, applyTheme, isAdmin, writeLayout, writeObjectMeta, suggestType, widgetFunctions, fnName, stateColor, isLight, newLinkKey, newExtraKey, newTextKey, newImageKey, widgetTypes, widgetKey, keyOf, pagesOf, pageOfWidget, newPageId, writeBackground } from '../lib/dashboard.js';
 
 const LIVE_LABEL = { live: 'Live', connecting: 'Ansluter…', offline: 'Polling', failed: 'Polling', off: 'Polling' };
 
@@ -50,6 +51,7 @@ export default function Dashboard({ iid, pageId = '' }) {
   const [linkEditor, setLinkEditor] = useState(null); // { key } – key null = new
   const [mqttEditor, setMqttEditor] = useState(null); // { key } – key null = new
   const [textEditor, setTextEditor] = useState(null); // { key } - key null = new
+  const [imageEditor, setImageEditor] = useState(null); // { key } - key null = new
   const [pageEditor, setPageEditor] = useState(null); // { id } – id null = new
   const [settings, setSettings] = useState(false);
   const [dragKey, setDragKey] = useState(null);
@@ -182,6 +184,7 @@ export default function Dashboard({ iid, pageId = '' }) {
     setLinkEditor(null);
     setMqttEditor(null);
     setTextEditor(null);
+    setImageEditor(null);
     await reload({ quiet: true });
   };
 
@@ -256,6 +259,18 @@ export default function Dashboard({ iid, pageId = '' }) {
     for (const [p, v] of Object.entries(all[k])) if (v === '' || v === false || v === undefined || v === null) delete all[k][p];
     await writeLayout(iid, { ...layout, widgets: all });
     setTextEditor(null);
+    await reload({ quiet: true });
+  };
+
+  /** Image widgets exist only in the layout file, like text widgets. */
+  const onSaveImage = async (key, params) => {
+    const all = { ...layout.widgets };
+    widgets.forEach((w, i) => (all[w.key] = { ...(all[w.key] || {}), order: i }));
+    const k = key || newImageKey(layout);
+    all[k] = { ...(all[k] || { order: widgets.length, ...pageField }), ...params };
+    for (const [p, v] of Object.entries(all[k])) if (v === '' || v === false || v === undefined || v === null) delete all[k][p];
+    await writeLayout(iid, { ...layout, widgets: all });
+    setImageEditor(null);
     await reload({ quiet: true });
   };
 
@@ -335,6 +350,7 @@ export default function Dashboard({ iid, pageId = '' }) {
     if (w.kind === 'link') return setLinkEditor({ key: w.key });
     if (w.kind === 'mqtt') return setMqttEditor({ key: w.key });
     if (w.kind === 'text') return setTextEditor({ key: w.key });
+    if (w.kind === 'image') return setImageEditor({ key: w.key });
     setEditor({ kind: w.kind, obj: w.obj, base: w.baseObj || w.obj, extra: !!w.extra, widgetType: w.type, key: w.key });
   };
 
@@ -464,7 +480,7 @@ export default function Dashboard({ iid, pageId = '' }) {
             const fill = w.type === 'value' && !stale && !(st && st.level > 0) ? stateColor(w.obj, ctx.valueOf(w.obj)?.value) : w.type === 'mqtt' && (w.layout.mode || 'value') === 'value' ? mqttShown(w, ctx)?.color || '' : '';
             const h = Number(w.layout.h) || 1;
             // the button itself carries the name for link and push buttons; a text without a heading is just the text
-            const bare = w.type === 'www' || w.type === 'button' || (w.type === 'text' && !String(w.layout.label || '').trim());
+            const bare = w.type === 'www' || w.type === 'button' || ((w.type === 'text' || w.type === 'image') && !String(w.layout.label || '').trim());
             return (
               <section
                 key={w.key}
@@ -556,6 +572,10 @@ export default function Dashboard({ iid, pageId = '' }) {
             setAdding(false);
             setTextEditor({ key: null });
           }}
+          onNewImage={() => {
+            setAdding(false);
+            setImageEditor({ key: null });
+          }}
           onPick={(c, type) => {
             setAdding(false);
             setEditor({ kind: c.kind, obj: c.obj, isNew: true, type });
@@ -611,6 +631,15 @@ export default function Dashboard({ iid, pageId = '' }) {
           onClose={() => setMqttEditor(null)}
           onSave={(params) => onSaveMqtt(mqttEditor.key, params)}
           onRemove={() => onRemoveEntry(mqttEditor.key)}
+        />
+      )}
+      {imageEditor && (
+        <ImageEditor
+          iid={iid}
+          entry={imageEditor.key ? layout.widgets[imageEditor.key] : null}
+          onClose={() => setImageEditor(null)}
+          onSave={(params) => onSaveImage(imageEditor.key, params)}
+          onRemove={() => onRemoveEntry(imageEditor.key)}
         />
       )}
       {textEditor && (

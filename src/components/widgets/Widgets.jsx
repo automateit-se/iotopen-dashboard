@@ -3,6 +3,7 @@ import { formatValue, formatAge, isOn, onOffValues } from '../../lib/format.js';
 import { fnName, writeTopic, onOffTopics, rangeOf, isBinary, isHidden, stateColor, safeUrl, controlTopic, isDiscrete, OBJ_META } from '../../lib/dashboard.js';
 import { Icon } from '../icons.jsx';
 import { FitText } from '../FitText.jsx';
+import { ImageWidget } from './Image.jsx';
 import { TimelineWidget } from './Timeline.jsx';
 import { MultiChartWidget } from './MultiChart.jsx';
 import { TrackerWidget } from './Tracker.jsx';
@@ -436,6 +437,7 @@ export const WIDGET_COMPONENTS = {
   www: LinkWidget,
   mqtt: MqttWidget,
   text: TextWidget,
+  image: ImageWidget,
   gauge: GaugeWidget,
   chart: ChartWidget,
   card: CardWidget,

@@ -27,6 +27,8 @@ const EVENTS = [...STRUCTURE_EVENTS, INSTALLATION_EVENT, FILE_EVENT];
  */
 export function useInstallation(iid) {
   const [inst, setInst] = useState(null);
+  // bumped when IoT Open says the installation's files changed (image widgets read the file list again)
+  const [fileVersion, setFileVersion] = useState(0);
   const [raw, setRaw] = useState(null); // { devices, functions }
   const [layout, setLayout] = useState({ version: 2, widgets: {} });
   const [error, setError] = useState(null);
@@ -174,7 +176,7 @@ export function useInstallation(iid) {
       if (!m[2].startsWith('evt/')) mqttStore.current.add(m[2], text, { retained, filters: filtersRef.current });
       if (STRUCTURE_EVENTS.includes(m[2])) return debounce('structure', () => load({ withLayout: false, quiet: true }));
       if (m[2] === INSTALLATION_EVENT) return debounce('installation', reloadInstallation);
-      if (m[2] === FILE_EVENT) return debounce('file', () => (reloadLayout(), reloadLogo()));
+      if (m[2] === FILE_EVENT) return debounce('file', () => (reloadLayout(), reloadLogo(), setFileVersion((n) => n + 1)));
       const entry = {
         topic: m[2],
         value: payload?.value,
@@ -288,5 +290,5 @@ export function useInstallation(iid) {
 
   const widgets = useMemo(() => (raw ? buildWidgets(raw, layout) : []), [raw, layout]);
 
-  return { inst, raw, layout, setLayout, widgets, logo, reloadLogo, error, loading, liveState, tick, valueOf, valueOfTopic, onLive, publish, notSent, edge, mqtt, reload: load };
+  return { inst, raw, layout, setLayout, widgets, logo, reloadLogo, error, loading, liveState, tick, valueOf, valueOfTopic, onLive, publish, notSent, edge, mqtt, reload: load, fileVersion };
 }

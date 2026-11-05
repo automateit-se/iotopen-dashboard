@@ -321,6 +321,9 @@ function addFile(iid, name, mime, buf) {
   return f;
 }
 
+// an image for the image widget: a plan of the office, as an installation file
+addFile(1001, 'planritning-kontoret.svg', 'image/svg+xml', Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 260"><rect width="400" height="260" fill="#f4f7f9"/><g fill="none" stroke="#0d3e53" stroke-width="6"><rect x="20" y="20" width="360" height="220"/><path d="M200 20v90M200 150v90M20 130h120M260 130h120"/></g><g font-family="sans-serif" font-size="18" fill="#0d3e53"><text x="60" y="80">Kontor</text><text x="250" y="80">Mötesrum</text><text x="60" y="200">Kök</text><text x="250" y="200">Entré</text></g><circle cx="300" cy="215" r="8" fill="#16a34a"/></svg>'));
+
 // ---------------- http helpers ----------------
 const send = (res, status, body, headers = {}) => {
   const isBuf = Buffer.isBuffer(body);
