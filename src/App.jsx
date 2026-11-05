@@ -4,6 +4,7 @@ import { useRoute } from './lib/router.js';
 import { config } from './api/config.js';
 import { Icon } from './components/icons.jsx';
 import Login from './pages/Login.jsx';
+import LinkConfirm from './pages/LinkConfirm.jsx';
 import Installations from './pages/Installations.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import { CloudState, PinButton, useLocalStatus } from './components/LocalBar.jsx';
@@ -36,11 +37,13 @@ const safeDecode = (s) => {
 };
 
 function Shell() {
-  const { user, booting, signOut, brandLogo } = useApp();
+  const { user, booting, signOut, brandLogo, link } = useApp();
   const path = useRoute();
   const local = config.local;
   const localStatus = useLocalStatus();
   if (booting) return <div className="center-screen muted">Laddar…</div>;
+  // a direct link that would replace the sign-in or use another server is confirmed first
+  if (link) return <LinkConfirm />;
   if (!user) return <Login />;
   // local mode: one installation, no list of installations
   const m = /^\/i\/(\d+)(?:\/p\/([^/]+))?/.exec(path) || (local ? [path, String(local.installation)] : null);
