@@ -202,6 +202,12 @@ input:focus, select:focus, textarea:focus, button:focus-visible { outline: 2px s
 .inst:hover { border-color: var(--accent); }
 .inst > span { display: grid; }
 .inst svg { color: var(--accent); }
+.inst > .grow { min-width: 0; }
+/* edge client status on an installation card, as in App Management */
+.inst > .edge-state, .edge-state { align-self: flex-start; flex: none; display: inline-flex; white-space: nowrap; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; padding: 3px 10px; border-radius: 99px; }
+.edge-state .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.edge-state.ok { color: var(--status-ok); background: color-mix(in srgb, var(--status-ok) 12%, var(--surface)); }
+.edge-state.crit { color: var(--status-crit); background: color-mix(in srgb, var(--status-crit) 12%, var(--surface)); }
 
 /* ---- dashboard grid ---- */
 /* half rows: h = 1 spans two of them plus the gap, so a full row is still 132 px and h = 0.5 is possible */

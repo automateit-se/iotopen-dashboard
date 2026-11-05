@@ -226,6 +226,10 @@ Limit syntax: `-w` = warning, `-c` = critical, each followed by comma separated 
 
 **Silent functions.** IoT Open's metric-monitor is a server job: for functions and devices with `metric_monitor.max_silent_time` it sets `metric_monitor.status` (1 or 2 when silent too long) and `metric_monitor.status_text`. The last value may then be out of date, so the dashboard shows such functions greyed out with the name struck through and a *Silent* (*Tyst*) label (the explanation appears on hover). Limits are not evaluated on a stale value, so a silent function never turns orange or red. A silent device makes all its functions silent. The dashboard never writes `metric_monitor.*`.
 
+### Edge client status in the list of installations
+
+Each installation card shows **Online** (green) or **Offline** (red) when the installation has an edge client, the same way App Management shows it. An edge client's MQTT bridge publishes `<client_id>/box/event/status` retained (1 connected, 0 not), so the list subscribes to that topic for every installation over one MQTT connection and follows changes while it is open. An installation that has never had an edge client sends nothing and gets no badge.
+
 ### Automatic updates
 
 IoT Open publishes `<client_id>/evt/<type>/updated` (payload `{}`) whenever something in the installation changes, metadata included. The dashboard subscribes to four of them and re-reads only what changed, within about a second:
