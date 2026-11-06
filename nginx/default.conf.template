@@ -89,6 +89,24 @@ server {
         proxy_pass       ${LYNX_URL};
     }
 
+    # Installation files: whoever may write the installation's files chooses their content and type, so a file
+    # must never become a page or a script on this origin. Always a download, as plain bytes, with a policy that
+    # lets nothing in it run. The dashboard reads files with fetch() and sets the type itself, so it is unaffected.
+    location ^~ ${BASE_PATH}/api/v2/file/download/ {
+        if ($dash_relay = 0) {
+            return 404;
+        }
+        include          /etc/nginx/snippets/lynx-proxy.conf;
+        proxy_read_timeout 60s;
+        limit_except GET { deny all; }
+        proxy_hide_header Content-Type;
+        proxy_hide_header Content-Disposition;
+        proxy_hide_header Content-Security-Policy;
+        include          /etc/nginx/snippets/download-headers.conf;
+        rewrite          ^${BASE_PATH}(/.*)$ $1 break;
+        proxy_pass       ${LYNX_URL};
+    }
+
     location ^~ ${BASE_PATH}/api/v3beta/log/ {
         if ($dash_relay = 0) {
             return 404;

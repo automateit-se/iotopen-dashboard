@@ -20,6 +20,7 @@ ENV LYNX_URL=https://lynx.iotopen.se \
     LIVE_UPDATES=true \
     CUSTOM_SERVERS=true \
     API_MODE=proxy \
+    TRUSTED_PROXIES="" \
     MAP_TILES="https://tile.openstreetmap.org/{z}/{x}/{y}.png" \
     MAP_ATTRIBUTION="© OpenStreetMap-bidragsgivare"
 COPY nginx/default.conf.template /etc/nginx/templates/default.conf.template
