@@ -80,6 +80,38 @@ if [ -n "$tiles" ]; then
 fi
 echo "MAP_TILES ok: '${tiles}'"
 
+# APP_TITLE is written into config.json inside the nginx configuration and shown as the page title: one line,
+# no quotes, backslashes, $, < or >
+case "${APP_TITLE:-}" in
+  *\"* | *\'* | *\\* | *\$* | *\<* | *\>*) echo "ERROR: APP_TITLE rejected: no quotes, backslashes, \$, < or >" >&2; exit 1 ;;
+esac
+if [ "$(printf '%s' "${APP_TITLE:-}" | tr -d '[:cntrl:]')" != "${APP_TITLE:-}" ]; then
+  echo "ERROR: APP_TITLE rejected: one line, no control characters" >&2; exit 1
+fi
+case "${LIVE_UPDATES:-true}" in
+  true | false) echo "LIVE_UPDATES ok: ${LIVE_UPDATES:-true}" ;;
+  *) echo "ERROR: LIVE_UPDATES='$LIVE_UPDATES' rejected: use true or false" >&2; exit 1 ;;
+esac
+
+# TRUSTED_PROXIES: the reverse proxies / load balancers in front (comma separated IPs or CIDRs). Their
+# X-Forwarded-For then gives the client's own address, for the login rate limit and for what IoT Open sees.
+# Empty = the connecting address is the client (no proxy in front, or every user counted as the proxy).
+REAL_IP_CONF="${REAL_IP_CONF:-/etc/nginx/conf.d/00-real-ip.conf}"
+proxies="${TRUSTED_PROXIES:-}"
+{
+  echo "# Written by 05-validate-lynx-url.sh from TRUSTED_PROXIES."
+  if [ -n "$proxies" ]; then
+    for p in $(echo "$proxies" | tr ',' ' '); do
+      echo "$p" | grep -Eq '^([0-9]{1,3}\.){3}[0-9]{1,3}(/[0-9]{1,2})?$|^[0-9A-Fa-f:]*:[0-9A-Fa-f:.]*(/[0-9]{1,3})?$' \
+        || { echo "ERROR: TRUSTED_PROXIES entry '$p' rejected: use IP addresses or CIDRs, e.g. 10.0.0.0/8,192.168.1.10" >&2; exit 1; }
+      echo "set_real_ip_from $p;"
+    done
+    echo "real_ip_header X-Forwarded-For;"
+    echo "real_ip_recursive on;"
+  fi
+} > "$REAL_IP_CONF" || exit 1
+echo "TRUSTED_PROXIES ok: '${proxies}'"
+
 # MAP_ATTRIBUTION is shown on the map; it is written into config.json, so no quotes, backslashes or $.
 case "${MAP_ATTRIBUTION:-}" in
   *\"* | *\'* | *\\* | *\$* | *\<* | *\>*) echo "ERROR: MAP_ATTRIBUTION rejected: no quotes, backslashes, \$, < or >" >&2; exit 1 ;;

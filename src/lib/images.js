@@ -49,19 +49,42 @@ export const displayName = (name) =>
 // object URLs by file hash, kept while the app is open (the same image on several widgets or pages is read once)
 const urls = new Map(); // hash -> Promise<string>
 
+// Only these types are ever given to the browser: the uploader's own type is not trusted (an odd one could make the
+// browser guess the content, in the worst case as a web page).
 const TYPES = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml', avif: 'image/avif', bmp: 'image/bmp' };
-/** The image type to show a file as: its own, else from its name (a download may come as octet-stream). */
-export const imageType = (f) => (/^image\//i.test(String(f?.mime || '')) ? f.mime : TYPES[String(f?.name || '').split('.').pop().toLowerCase()] || 'image/jpeg');
+const KNOWN = new Set(Object.values(TYPES));
+/** The image type to show a file as: its own when it is a known image type, else from its name, else JPEG. */
+export function imageType(f) {
+  const own = String(f?.mime || '').split(';')[0].trim().toLowerCase();
+  if (KNOWN.has(own)) return own;
+  return TYPES[String(f?.name || '').split('.').pop().toLowerCase()] || 'image/jpeg';
+}
 
-/** An object URL for a file's content, downloaded once per hash. */
+/**
+ * The URL to show a file's content at, made once per hash. An SVG can hold scripts: in <img> they never run, but an
+ * object URL (blob:) belongs to this origin, so "open image in new tab" would run them with access to the sign-in.
+ * SVGs therefore get a data: URL, which has no origin of its own; other images an object URL.
+ */
 export function imageUrl(file) {
   if (!file?.hash) return Promise.reject(new Error('Filen saknar innehåll'));
   if (!urls.has(file.hash)) {
-    const p = lynx.downloadFile(file.hash).then(async (res) => URL.createObjectURL(new Blob([await res.blob()], { type: imageType(file) })));
+    const type = imageType(file);
+    const p = lynx.downloadFile(file.hash).then(async (res) => {
+      const blob = new Blob([await res.blob()], { type });
+      return type === 'image/svg+xml' ? dataUrl(blob) : URL.createObjectURL(blob);
+    });
     p.catch(() => urls.delete(file.hash));
     urls.set(file.hash, p);
   }
   return urls.get(file.hash);
+}
+
+/** "data:<type>;base64,…" of a blob. */
+export async function dataUrl(blob) {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return `data:${blob.type};base64,${btoa(bin)}`;
 }
 
 /** Installation files, read once per change (the file list is shared by all image widgets on the page). */
