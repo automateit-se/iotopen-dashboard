@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 // lib/images.js reads files through the API client, which looks at the page address when loaded
 globalThis.window ??= { location: { href: 'http://localhost/', hash: '', pathname: '/', search: '' } };
-const { displayName, findImage, imageFiles, imageType, isImageFile, uploadName } = await import('../src/lib/images.js');
+const { dataUrl, displayName, findImage, imageFiles, imageType, isImageFile, uploadName } = await import('../src/lib/images.js');
 
 const files = [
   { id: 1, name: 'dashboard-layout.json', mime: 'application/json', updated: 5 },
@@ -35,4 +35,20 @@ test('upload names, display names and types', () => {
   assert.equal(displayName('planritning.png'), 'planritning');
   assert.equal(imageType({ name: 'a.svg', mime: 'application/octet-stream' }), 'image/svg+xml');
   assert.equal(imageType({ name: 'a.bin', mime: 'image/webp' }), 'image/webp');
+});
+
+test('only known image types reach the browser, and an SVG becomes a data: URL', async () => {
+  // the uploader's type is only used when it is a known image type
+  assert.equal(imageType({ name: 'a.png', mime: 'image/../text/html' }), 'image/png');
+  assert.equal(imageType({ name: 'a.bin', mime: 'image/x-weird' }), 'image/jpeg');
+  assert.equal(imageType({ name: 'a.bin', mime: 'text/html' }), 'image/jpeg');
+  assert.equal(imageType({ name: 'a.bin', mime: 'IMAGE/SVG+XML; charset=utf-8' }), 'image/svg+xml');
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg"><script>x()</script></svg>';
+  const url = await dataUrl(new Blob([svg], { type: 'image/svg+xml' }));
+  assert.match(url, /^data:image\/svg\+xml;base64,/);
+  assert.equal(Buffer.from(url.split(',')[1], 'base64').toString(), svg);
+  // larger than one chunk
+  const big = new Uint8Array(100000).map((_, i) => i % 251);
+  const back = Buffer.from((await dataUrl(new Blob([big], { type: 'image/svg+xml' }))).split(',')[1], 'base64');
+  assert.ok(back.equals(Buffer.from(big)));
 });
