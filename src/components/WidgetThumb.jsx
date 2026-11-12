@@ -85,6 +85,13 @@ const DRAW = {
       <rect x="42" y="30" width="14" height="5" rx="2.5" className="th-off" />
     </>
   ),
+  mode: (
+    <>
+      <rect x="6" y="13" width="16" height="14" rx="3" className="th-fill" />
+      <rect x="24" y="13" width="16" height="14" rx="3" className="th-off" />
+      <rect x="42" y="13" width="16" height="14" rx="3" className="th-off" />
+    </>
+  ),
   card: (
     <>
       {[10, 20, 30].map((y) => (
