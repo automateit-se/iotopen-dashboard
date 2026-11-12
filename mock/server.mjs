@@ -99,6 +99,9 @@ function signal(iid, topic, gen) {
     'dashboard.color_disarmed': '#16a34a', 'dashboard.color_armed_home': '#f6a53e', 'dashboard.color_armed': '#dc2626', 'dashboard.widget': 'value', 'dashboard.icon': 'lock',
   });
   setStatus({ client_id: 5001, installation_id: iid, topic: 'obj/alarm/1/state', value: 2, msg: '', timestamp: now() - 300 });
+  // the installation's mode from the Mode edge app (a function without a device)
+  fn(iid, null, 'mode', 'Läge', 'obj/mode/default', { topic_write: 'set/obj/mode/default', 'mode.name': 'default', 'mode.states': '0:home:Hemma,1:away:Borta,2:vacation:Semester', 'dashboard.widget': 'mode' });
+  setStatus({ client_id: 5001, installation_id: iid, topic: 'obj/mode/default', value: 0, msg: 'start', timestamp: now() - 3600 });
   // door bell: a push button that sends 1 while held and 0 when released
   const bell = dev(iid, 'doorbell', 'Dörrklocka');
   fn(iid, bell, 'button', 'Ringklocka', 'obj/bell/1/state', { topic_write: 'set/obj/bell/1/state', topic_write_chime: 'set/obj/bell/1/chime', 'dashboard.press': '1', 'dashboard.release': '0' });

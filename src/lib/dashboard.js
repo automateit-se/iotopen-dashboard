@@ -42,6 +42,7 @@ import { stateMap, stateFor } from './format.js';
 import { MQTT_PREFIX } from './mqttWidget.js';
 import { backgroundFile } from './background.js';
 import { assertStorable } from './metaValue.js';
+import { isMode } from './mode.js';
 import { LayoutConflict } from './layoutStore.js';
 
 /** A colour from metadata or the layout file, or '' – anything that is not a valid CSS colour is ignored. */
@@ -163,6 +164,7 @@ export const FUNCTION_WIDGETS = [
   { id: 'consumption', label: 'Förbrukning', help: 'Staplar per timme, dygn, vecka eller månad från en mätarställning (el, vatten, besökare…). Använder sammanställd data från IoT Open.' },
   { id: 'sum', label: 'Summa per period', help: 'Förbrukningen idag, denna vecka, denna månad … som stora tal, från en mätarställning eller förbrukning per värde.' },
   { id: 'button', label: 'Tryckknapp', help: 'Fjädrande knapp, t.ex. dörrklocka: skickar ett värde när den trycks ned och (valfritt) ett när den släpps.' },
+  { id: 'mode', label: 'Läge', help: 'Installationens läge från appen Läge (Hemma, Borta, Semester …): en knapp per läge, det aktuella markerat. Byter läge via topic_write.' },
 ];
 export const DEVICE_WIDGETS = [
   { id: 'card', label: 'Enhetskort', help: 'Alla funktioner som hör till enheten i ett kort.' },
@@ -172,7 +174,7 @@ export const DEVICE_WIDGETS = [
 export const WIDGET_LABEL = { ...Object.fromEntries([...FUNCTION_WIDGETS, ...DEVICE_WIDGETS].map((w) => [w.id, w.label])), timeline: 'Tidslinje', multichart: 'Graf (flera)', tracker: 'Karta (Tracker)', www: 'Länkknapp (www)', mqtt: 'MQTT', text: 'Text', image: 'Bild', missing: 'Saknas' };
 
 /** Widget types that can be half a row high, e.g. a banner across the top of the dashboard. */
-export const HALF_HEIGHT_TYPES = ['value', 'status', 'switch', 'button', 'www', 'mqtt', 'text'];
+export const HALF_HEIGHT_TYPES = ['value', 'status', 'switch', 'button', 'mode', 'www', 'mqtt', 'text'];
 export const heightOptions = (type) => [...(HALF_HEIGHT_TYPES.includes(type) ? [[0.5, '0,5 (banner)']] : []), [1, '1'], [2, '2'], [3, '3'], [4, '4']];
 
 /**
@@ -184,6 +186,7 @@ export function fitsType(type, kind, obj) {
   if (kind !== 'function') return false;
   if (type === 'switch') return !!controlTopic(obj, writeTopic(obj)) && isBinary(obj);
   if (type === 'button') return !!controlTopic(obj, writeTopic(obj));
+  if (type === 'mode') return isMode(obj) && !!writeTopic(obj);
   if (type === 'number') return !!writeTopic(obj);
   if (type === 'status') return isDiscrete(obj);
   if (type === 'consumption' || type === 'sum') return !isDiscrete(obj);
@@ -201,6 +204,7 @@ export const DEFAULT_LAYOUT = {
   switch: { w: 2, h: 1 },
   number: { w: 2, h: 1 },
   button: { w: 2, h: 1 },
+  mode: { w: 4, h: 1 },
   www: { w: 2, h: 1 },
   mqtt: { w: 2, h: 1, mode: 'value' },
   text: { w: 4, h: 1, size: 'm' },
@@ -289,6 +293,7 @@ export function onOffTopics(fn) {
 /** Suggested widget type for an object that has none yet. */
 export function suggestType(kind, obj) {
   if (kind === 'device') return 'card';
+  if (isMode(obj) && writeTopic(obj)) return 'mode';
   if (writeTopic(obj)) return isBinary(obj) ? 'switch' : 'number';
   if (isBinary(obj)) return 'status';
   return 'value';
