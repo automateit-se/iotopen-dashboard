@@ -8,7 +8,7 @@ import { isMediaDevice } from '../lib/media.js';
 import { isThermostatDevice } from '../lib/thermostat.js';
 
 // the miniatures under the hint: what can be made from a function or device
-const THUMBS = ['value', 'chart', 'gauge', 'switch', 'status', 'number', 'button', 'consumption', 'sum', 'card', 'media', 'thermostat'];
+const THUMBS = ['value', 'chart', 'gauge', 'switch', 'status', 'number', 'button', 'consumption', 'sum', 'card', 'media', 'thermostat', 'mode'];
 
 // focus the search only with a mouse: on a touch screen it opens the keyboard over half the list
 const DEVICE_AS = {
@@ -116,7 +116,7 @@ export function AddWidget({ raw, valueOf, onPick, onNewGroup, onNewLink, onNewMq
         </button>
       </div>
       <p className="muted small add-hint">
-        Övriga widgets (värde, graf, mätare, brytare, status, börvärde, tryckknapp, förbrukning, summa per period, enhetskort, media, termostat): välj först en funktion eller enhet nedan, sedan typ i nästa steg.
+        Övriga widgets (värde, graf, mätare, brytare, status, börvärde, tryckknapp, förbrukning, summa per period, enhetskort, media, termostat, läge): välj först en funktion eller enhet nedan, sedan typ i nästa steg.
         Klicka på en miniatyr för att bara se det som passar. En funktion kan ha flera widgets, även av samma typ, t.ex. fyra tryckknappar som skickar olika värden.
       </p>
       <div className="thumbs" role="group" aria-label="Widgettyper">
