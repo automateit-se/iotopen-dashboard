@@ -3,6 +3,8 @@
 //   state_<x> + text_<x> pairs for discrete values, e.g. state_on/text_on, state_open/text_open,
 //   state_closed/text_closed, state_true/text_true, state_movement/text_movement …
 
+import { isMode, modeState } from './mode.js';
+
 // state_<x> names that mean the "active" side (drawn as on in toggles, status dots and timelines)
 const ACTIVE_STATES = ['on', 'open', 'true', 'movement', 'motion', 'presence', 'occupied', 'detected', 'leak', 'wet', 'alarm', 'active', 'tamper', 'smoke', 'unlocked'];
 
@@ -40,6 +42,10 @@ export function isOn(fn, value) {
 export function formatValue(fn, value) {
   if (value === undefined || value === null || value === '') return '–';
   const m = fn?.meta || {};
+  if (isMode(fn)) {
+    const ms = modeState(fn, value);
+    if (ms) return ms.label;
+  }
   const st = stateFor(fn, value);
   if (st) return st.text || (st.key === 'on' ? 'På' : st.key === 'off' ? 'Av' : st.key);
   if (m.format) {

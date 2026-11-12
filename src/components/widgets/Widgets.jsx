@@ -16,6 +16,7 @@ import { MqttWidget } from './Mqtt.jsx';
 import { TextWidget } from './Text.jsx';
 import { statusOf, staleProps } from '../../lib/status.js';
 import { gaugeRange } from '../../lib/scale.js';
+import { modeStates, modeState } from '../../lib/mode.js';
 
 /** CSS class for a value's status (warning/critical colour), '' when OK or none. */
 export const stClass = (fn, value) => {
@@ -332,6 +333,41 @@ export function ButtonWidget({ w, ctx }) {
 }
 
 // ---- link button (www) ---------------------------------------------------------------------------
+// ---- mode (the installation's mode from the Mode app: one button per state) ----------------------------
+export function ModeWidget({ w, ctx }) {
+  const fn = w.obj;
+  const write = controlTopic(fn, writeTopic(fn));
+  const states = modeStates(fn);
+  const v = ctx.valueOf(fn);
+  const current = modeState(fn, v?.value);
+  const [pending, setPending] = useState(null);
+  const [err, setErr] = useState('');
+  useEffect(() => setPending(null), [v?.timestamp]);
+  const shown = pending ?? current?.value;
+  const pick = (s) => {
+    if (!write) return setErr('Funktionen saknar topic_write');
+    if (s.value === shown) return;
+    // the msg is kept in IoT Open's log, so it is clear the change came from a dashboard
+    if (!ctx.publish(write, s.value, 'Dashboard')) return setErr(ctx.notSent());
+    setErr('');
+    setPending(s.value);
+    setTimeout(() => setPending(null), 8000); // back to the reported mode if the Mode app does not answer
+  };
+  if (!states.length) return <div className="muted small">Läget saknar mode.states</div>;
+  return (
+    <div className="w-mode">
+      <div className="seg" role="radiogroup" aria-label={fnName(fn)}>
+        {states.map((s) => (
+          <button key={s.value} type="button" role="radio" aria-checked={s.value === shown} className={`${s.value === shown ? 'on' : ''} ${pending === s.value ? 'pending' : ''}`} onClick={() => pick(s)} disabled={!write}>
+            {s.label}
+          </button>
+        ))}
+      </div>
+      <div className="muted small">{err ? <span className="err">{err}</span> : v ? `${v.msg ? `${v.msg}, ` : ''}${formatAge(v.timestamp)}` : 'inget värde'}</div>
+    </div>
+  );
+}
+
 export function LinkWidget({ w, iid }) {
   // a page of this dashboard: a plain hash link, same tab
   if (w.layout.target_page) {
@@ -434,6 +470,7 @@ export const WIDGET_COMPONENTS = {
   switch: SwitchWidget,
   number: NumberWidget,
   button: ButtonWidget,
+  mode: ModeWidget,
   www: LinkWidget,
   mqtt: MqttWidget,
   text: TextWidget,
