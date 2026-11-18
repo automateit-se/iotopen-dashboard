@@ -11,7 +11,7 @@ ARG APP_VERSION=""
 RUN APP_VERSION="$APP_VERSION" npm run build
 
 # ---- runtime: static files + reverse proxy to IoT Open, non-root on :8080 ----
-FROM nginxinc/nginx-unprivileged:1.27-alpine
+FROM nginxinc/nginx-unprivileged:1.31-alpine
 ENV LYNX_URL=https://lynx.iotopen.se \
     ALLOWED_LYNX_HOSTS=lynx.iotopen.se \
     ALLOW_INSECURE_LYNX_URL=false \
