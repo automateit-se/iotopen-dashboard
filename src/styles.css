@@ -231,12 +231,12 @@ input:focus, select:focus, textarea:focus, button:focus-visible { outline: 2px s
 .tile.status-1, .tile.status-2 { border-width: 2px; }
 .tile.status-1 {
   background: var(--status-warn); border-color: var(--status-warn); color: #0d3e53;
-  --text: #0d3e53; --muted: rgba(13, 62, 83, 0.78); --surface-2: rgba(255, 255, 255, 0.35); --border: rgba(13, 62, 83, 0.22);
+  --text: #0d3e53; --muted: rgba(13, 62, 83, 0.78); --surface: #fff7ea; --surface-2: rgba(255, 255, 255, 0.35); --border: rgba(13, 62, 83, 0.22);
   --tile-color: #0d3e53 !important; --row-color: #0d3e53 !important; --off: rgba(13, 62, 83, 0.35);
 }
 .tile.status-2 {
   background: var(--status-crit); border-color: var(--status-crit); color: #fff;
-  --text: #fff; --muted: rgba(255, 255, 255, 0.85); --surface-2: rgba(255, 255, 255, 0.22); --border: rgba(255, 255, 255, 0.3);
+  --text: #fff; --muted: rgba(255, 255, 255, 0.85); --surface: #7f1d1d; --surface-2: rgba(255, 255, 255, 0.22); --border: rgba(255, 255, 255, 0.3);
   --tile-color: #fff !important; --row-color: #fff !important; --off: rgba(255, 255, 255, 0.45);
 }
 .tile.status-1::before, .tile.status-2::before { display: none; }
@@ -742,3 +742,10 @@ textarea { resize: vertical; min-height: 80px; }
 .link-facts dd { margin: 0; overflow-wrap: anywhere; }
 .link-facts .crit-text { color: var(--status-crit); }
 .link-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+/* aggregated graphs: the pointer covers the whole interval under it */
+.mchart-box .hover-band { fill: var(--muted); opacity: 0.18; }
+/* a filled tile changes the text colour, so the floating label and the chosen range follow it, or dark mode
+   shows dark text on a dark surface (status tiles set their own --surface above) */
+.tile.filled .mchart-hover-time { background: var(--fill); color: var(--fill-text); border-color: color-mix(in srgb, var(--fill-text) 35%, transparent); }
+.tile.filled .range-pick button.on { --range-on-bg: color-mix(in srgb, var(--fill-text) 16%, var(--fill)); --range-on-text: var(--fill-text); }

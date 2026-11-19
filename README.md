@@ -264,6 +264,14 @@ History comes from `/api/v3beta/log`. For graphs the dashboard lets IoT Open agg
 
 The method is chosen per graph (`aggr` in the layout file): average (default), median, minimum, maximum, last value or sum – *last value* or *maximum* suits meter readings. The graph states e.g. *Visar medelvärde per 3 h* (average per 3 h). Without aggregation (older IoT Open) raw data is read, at most 30,000 values.
 
+An aggregated value stands for its whole interval, not a moment, and the graph shows it that way:
+
+- The line goes through the **middle** of each interval (IoT Open stamps a value with the interval's start).
+- A graph with one function and averages also reads IoT Open's **minimum and maximum per interval** (two more reads) and draws them as a light band behind the line, one flat step per interval. A short peak, such as a door to a warm room left open for half an hour, then shows in the band even when the average evens it out. The note says *Linjen visar medelvärde per 3 h, fältet lägsta och högsta värde*.
+- The pointer covers a **whole interval**: it highlights it and says e.g. *12 nov. 06:00–09:00 · medel 9,1 °C (8,9 °C–9,4 °C)*, never a time of day the data does not have. In an empty interval between values that belong together (a sensor that reports every 15 minutes leaves two of three 5-minute intervals empty) it moves to the nearer interval with a value.
+- A **gap** (no values for more than two and a half times the series' usual spacing, e.g. an edge client offline) breaks the line and the band and is bridged by a thin dashed line; the pointer says *inga värden* there.
+- Raw values (windows up to 6 h, or zoomed in) are drawn as before, and the pointer says when the value was measured, e.g. *06:15 · 9,1 °C (mätt 06:12)*.
+
 Timelines always read raw data, since averaging on/off states would hide events. The cap is the newest 60,000 events; when reached, the timeline says where they start. Short events are drawn with a **minimum width** (`min_width`, percent of the width, default 1; 0 = exact length).
 
 ### The layout file `dashboard-layout.json` (installation File API)
