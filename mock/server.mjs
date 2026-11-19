@@ -217,6 +217,23 @@ for (const s of signals) {
     setStatus(e);
   }
 }
+// 30 days of history for Temperatur, so long windows have something to aggregate: a short warm peak (a door to a
+// warm room left open for 40 minutes) 20 days ago, and 10 hours without values (an edge client offline) 12 days ago
+{
+  const temp = signals.find((x) => x.topic === 'obj/zwave/12/temp');
+  if (temp) {
+    const peak = now() - 20 * 86400;
+    const offFrom = now() - 12 * 86400;
+    const older = [];
+    for (let ts = now() - 30 * 86400; ts < now() - 48 * 3600; ts += 900) {
+      if (ts >= offFrom && ts < offFrom + 10 * 3600) continue;
+      const warm = ts >= peak && ts < peak + 2400 ? 16 : 0;
+      older.push({ client_id: clientOf(temp.iid), installation_id: temp.iid, timestamp: ts, topic: temp.topic, value: +(temp.gen(ts) + warm).toFixed(2), msg: '' });
+    }
+    logs.unshift(...older);
+  }
+}
+
 // made-up routes: a loop for the vehicle, a slower loop on the water for the boat
 const carAt = (ts) => {
   const t = (ts / 1800) * Math.PI;

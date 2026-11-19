@@ -8,6 +8,7 @@
 // Timelines (discrete): read raw – averaging on/off states would hide events. Capped at the newest events.
 
 import { lynx } from '../api/lynx.js';
+import { intervalSeconds, withBand } from './buckets.js';
 
 const PAGE = 2000;
 const CAP = { numeric: 30000, discrete: 60000 };
@@ -64,10 +65,11 @@ async function readAll(iid, q, cap) {
 }
 
 /**
- * @returns {Promise<{ byTopic: Map<string, {ts:number, value:any}[]>, aggr: {method, interval}|null,
- *                     capped: boolean, truncatedFrom: number|null, total: number }>}
+ * band: with averages, also IoT Open's min and max per interval, as min / max on each point (two more reads).
+ * @returns {Promise<{ byTopic: Map<string, {ts:number, value:any, min?:number, max?:number}[]>,
+ *                     aggr: {method, interval, seconds, band}|null, capped: boolean, truncatedFrom: number|null, total: number }>}
  */
-export async function loadHistory(iid, clientId, topics, from, to, { mode = 'numeric', method = 'avg' } = {}) {
+export async function loadHistory(iid, clientId, topics, from, to, { mode = 'numeric', method = 'avg', band = false } = {}) {
   const full = topics.map((t) => (clientId ? `${clientId}/${t}` : t));
   const byTopic = new Map(topics.map((t) => [t, []]));
   const push = (e) => {
@@ -97,6 +99,26 @@ export async function loadHistory(iid, clientId, topics, from, to, { mode = 'num
     res.data.forEach(push);
     capped = res.capped;
     total = res.total;
+    if (aggr) {
+      aggr.seconds = intervalSeconds(interval);
+      aggr.band = false;
+      // a band needs the same intervals' min and max; without them the line alone is shown
+      if (band && method === 'avg') {
+        const extra = (m) => readAll(iid, { ...base, aggr_method: m, aggr_interval: interval }, CAP.numeric).catch(() => null);
+        const [lo, hi] = await Promise.all([extra('min'), extra('max')]);
+        if (lo && hi) {
+          const group = (r) => {
+            const by = new Map(topics.map((t) => [t, []]));
+            for (const e of r.data) if (Number.isFinite(Number(e.value))) by.get(e.topic)?.push({ ts: e.timestamp, value: Number(e.value) });
+            return by;
+          };
+          const los = group(lo);
+          const his = group(hi);
+          for (const t of topics) byTopic.set(t, withBand(byTopic.get(t), los.get(t), his.get(t)));
+          aggr.band = true;
+        }
+      }
+    }
   } else {
     const first = await lynx.log(iid, { ...base, limit: PAGE, offset: 0, order: 'asc' });
     total = Number(first?.total ?? first?.data?.length ?? 0);
