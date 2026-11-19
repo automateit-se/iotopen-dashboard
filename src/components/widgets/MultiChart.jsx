@@ -175,6 +175,7 @@ export function MultiChartWidget({ w, ctx, iid, single = false }) {
                       {gapLinks(rs, iv, X, Y).map((g, k) => (
                         <line key={`g${k}`} {...g} stroke={color} strokeWidth="1" strokeDasharray="2 4" opacity="0.6" vectorEffect="non-scaling-stroke" />
                       ))}
+                      {!single && rs.map((r, k) => (r.length > 1 ? <path key={`h${k}`} d={linePath(r, iv, X, Y)} className="line-halo" vectorEffect="non-scaling-stroke" /> : null))}
                       {rs.map((r, k) =>
                         r.length > 1 ? (
                           <path key={`l${k}`} d={linePath(r, iv, X, Y)} fill="none" stroke={color} strokeWidth="2" vectorEffect="non-scaling-stroke" />
@@ -192,6 +193,7 @@ export function MultiChartWidget({ w, ctx, iid, single = false }) {
                 return (
                   <g key={f.id}>
                     {single && <path d={`${d} L${X(p[p.length - 1].ts).toFixed(2)},100 L${X(p[0].ts).toFixed(2)},100 Z`} fill={color} opacity="0.12" />}
+                    {!single && <path d={d} className="line-halo" vectorEffect="non-scaling-stroke" />}
                     <path d={d} fill="none" stroke={color} strokeWidth="2" vectorEffect="non-scaling-stroke" />
                   </g>
                 );

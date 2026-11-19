@@ -749,3 +749,10 @@ textarea { resize: vertical; min-height: 80px; }
    shows dark text on a dark surface (status tiles set their own --surface above) */
 .tile.filled .mchart-hover-time { background: var(--fill); color: var(--fill-text); border-color: color-mix(in srgb, var(--fill-text) 35%, transparent); }
 .tile.filled .range-pick button.on { --range-on-bg: color-mix(in srgb, var(--fill-text) 16%, var(--fill)); --range-on-text: var(--fill-text); }
+
+/* lines with their own colour on a tile in a status colour (an orange line on an orange warning tile): a thin
+   outline in the tile's text colour under each line, and a ring around the legend's colour dots, keep every colour
+   visible. Elsewhere the outline is not drawn. */
+.mchart .line-halo { display: none; fill: none; stroke: var(--text); stroke-width: 4.5; stroke-linejoin: round; stroke-linecap: round; }
+.tile.status-1 .mchart .line-halo, .tile.status-2 .mchart .line-halo, .tile.filled .mchart .line-halo { display: inline; }
+.tile.status-1 .mchart-legend .swatch-dot, .tile.status-2 .mchart-legend .swatch-dot, .tile.filled .mchart-legend .swatch-dot { box-shadow: 0 0 0 1.5px var(--text); }
